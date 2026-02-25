@@ -17,3 +17,4 @@ By signing this contributor license agreement, You understand and agree that You
 7. Should You wish to submit work that is not Your original creation, You may submit it to Snowflake separately from any Contribution, identifying the complete details of its source and of any license or other restriction (including, but not limited to, related patents, trademarks, and license agreements) of which you are personally aware, and conspicuously marking the work as "Submitted on behalf of a third-party: [named here]".
 
 8. NOTICE TO SNOWFLAKE. You agree to notify Snowflake of any facts or circumstances of which you become aware that would make these representations inaccurate in any respect.
+
