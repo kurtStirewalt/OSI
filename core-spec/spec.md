@@ -1,6 +1,6 @@
 # OSI - Core Metadata Specification
 
-**Version:** 1.0
+**Version:** 0.1.1
 
 ## Goals
 
@@ -549,7 +549,7 @@ ai_context:
 
 ## Version History
 
-- **1.0** (2024-12-11): Initial release
+- **0.1.1** (2024-12-11): Initial release
   - Core semantic model structure
   - Support for datasets, relationships, fields, and metrics
   - Multi-dialect metric expressions
