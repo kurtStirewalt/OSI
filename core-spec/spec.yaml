@@ -46,7 +46,7 @@ semantic_model:
 
     # Optional: Defines how logical datasets are connected
     # See Relationships section below for detailed structure
-    relationships:[]
+    relationships: []
 
     # Optional: 
     # These metrics can span one or more logical datasets and use relationships
