@@ -14,58 +14,25 @@ import warnings
 import yaml
 
 
-DEFAULT_SUPPORTED_VERSIONS = {"0.1.0", "0.1.1"}
+SUPPORTED_VERSION = "0.1.1"
 
 
 class OsiConversionError(Exception):
     """Raised when an OSI YAML cannot be converted to Snowflake format."""
 
 
-def _unwrap_semantic_model(root):
-    """Handles both wrapped and flattened OSI YAML formats.
-
-    Wrapped format has ``version`` at root and model properties inside
-    ``semantic_model: [...]``. Flattened format has everything at root.
-    Returns a single dict with version + all model properties merged.
-    """
-    semantic_model = root.get("semantic_model")
-    if semantic_model is None:
-        # Flattened format — everything at root
-        return root
-
-    # Wrapped format — extract first model from the list
-    if not isinstance(semantic_model, list) or len(semantic_model) == 0:
-        raise OsiConversionError(
-            "Invalid OSI YAML: 'semantic_model' must be a non-empty list"
-        )
-
-    model = semantic_model[0]
-    if not isinstance(model, dict):
-        raise OsiConversionError(
-            "Invalid OSI YAML: 'semantic_model' entries must be mappings"
-        )
-
-    # Merge root-level version into the model dict (version lives outside
-    # the semantic_model wrapper in the OSI spec)
-    version = root.get("version")
-    if version is not None and "version" not in model:
-        model["version"] = version
-
-    return model
-
-
-def convert_osi_to_snowflake(osi_yaml_str, supported_versions=None):
+def convert_osi_to_snowflake(osi_yaml_str):
     """Top-level entry point. Parses OSI YAML, validates, converts, returns
     Snowflake YAML string.
 
-    Accepts both:
-    - Wrapped format: ``version`` at root, model inside ``semantic_model: [...]``
-    - Flattened format: ``version``, ``name``, ``datasets``, etc. all at root
+    Expects the standard OSI wrapped format::
+
+        version: "0.1.1"
+        semantic_model:
+          - name: ...
 
     Args:
         osi_yaml_str: OSI YAML as a string.
-        supported_versions: Set of supported OSI version strings.
-            Defaults to {"0.1.0", "0.1.1"}.
 
     Returns:
         Snowflake Cortex Analyst semantic model YAML string.
@@ -73,29 +40,34 @@ def convert_osi_to_snowflake(osi_yaml_str, supported_versions=None):
     Raises:
         OsiConversionError: If the input cannot be converted.
     """
-    if supported_versions is None:
-        supported_versions = DEFAULT_SUPPORTED_VERSIONS
-
     root = yaml.safe_load(osi_yaml_str)
     if not isinstance(root, dict):
         raise OsiConversionError("Invalid OSI YAML: expected a mapping at the root")
 
-    # Handle wrapped format: version at root, model inside semantic_model list
-    osi = _unwrap_semantic_model(root)
-
-    version = osi.get("version")
-    if version is None:
-        warnings.warn(
-            "OSI YAML is missing a 'version' field; version validation skipped",
-            stacklevel=2,
+    version_str = str(root.get("version", ""))
+    if version_str != SUPPORTED_VERSION:
+        raise OsiConversionError(
+            f"Unsupported OSI specification version '{version_str}'. "
+            f"Supported: {SUPPORTED_VERSION}"
         )
-    else:
-        version_str = str(version)
-        if version_str not in supported_versions:
-            raise OsiConversionError(
-                f"Unsupported OSI specification version '{version_str}'. "
-                f"Supported: {sorted(supported_versions)}"
-            )
+
+    semantic_model = root.get("semantic_model")
+    if not isinstance(semantic_model, list) or len(semantic_model) == 0:
+        raise OsiConversionError(
+            "Invalid OSI YAML: 'semantic_model' must be a non-empty list"
+        )
+
+    if len(semantic_model) > 1:
+        warnings.warn(
+            f"OSI YAML contains {len(semantic_model)} semantic models; "
+            f"only the first will be converted"
+        )
+
+    osi = semantic_model[0]
+    if not isinstance(osi, dict):
+        raise OsiConversionError(
+            "Invalid OSI YAML: 'semantic_model' entries must be mappings"
+        )
 
     snowflake_model = _convert_model(osi)
 
@@ -137,7 +109,11 @@ def _convert_model(osi):
     # metrics
     metrics = osi.get("metrics")
     if metrics:
-        converted_metrics = [m for m in (_convert_metric(m) for m in metrics) if m is not None]
+        converted_metrics = []
+        for m in metrics:
+            converted = _convert_named_expr(m, "metric")
+            if converted is not None:
+                converted_metrics.append(converted)
         if converted_metrics:
             result["metrics"] = converted_metrics
 
@@ -190,7 +166,7 @@ def _convert_dataset(dataset):
 
         for field in fields:
             classification = _classify_field(field)
-            converted = _convert_field(field)
+            converted = _convert_named_expr(field, "field")
             if converted is None:
                 continue
             if classification == "time_dimension":
@@ -223,60 +199,35 @@ def _classify_field(field):
     return "dimension"
 
 
-def _convert_field(field):
-    """Converts an OSI field dict to a Snowflake dimension/time_dimension/fact entry."""
-    field_name = field.get("name")
-    if not field_name:
-        raise OsiConversionError("Missing required 'name' field in field definition")
+def _convert_named_expr(entry, kind):
+    """Converts an OSI field or metric dict to a Snowflake entry with name, expr,
+    description, and synonyms.
 
-    expr_str = _extract_expression(field.get("expression"), field_name)
+    Args:
+        entry: The OSI field or metric dict.
+        kind: Human-readable type for error messages (e.g., "field", "metric").
+    """
+    name = entry.get("name")
+    if not name:
+        raise OsiConversionError(f"Missing required 'name' in {kind}")
+
+    expr_str = _extract_expression(entry.get("expression"), name)
     if expr_str is None:
         return None
 
     result = {}
-    result["name"] = field_name
+    result["name"] = name
     result["expr"] = expr_str
 
-    description = field.get("description")
+    description = entry.get("description")
     if description:
         result["description"] = description
 
-    # Extract synonyms from ai_context (synonyms map to a native Snowflake field)
-    synonyms = _extract_synonyms(field.get("ai_context"))
+    synonyms = _extract_synonyms(entry.get("ai_context"))
     if synonyms:
         result["synonyms"] = synonyms
 
-    # Warn about dropped OSI-only fields
-    _warn_dropped_fields(field, f"field '{field_name}'")
-
-    return result
-
-
-def _convert_metric(metric):
-    """Converts an OSI metric dict to a Snowflake model-level metric dict."""
-    metric_name = metric.get("name")
-    if not metric_name:
-        raise OsiConversionError("Missing required 'name' field in metric")
-
-    expr_str = _extract_expression(metric.get("expression"), metric_name)
-    if expr_str is None:
-        return None
-
-    result = {}
-    result["name"] = metric_name
-    result["expr"] = expr_str
-
-    description = metric.get("description")
-    if description:
-        result["description"] = description
-
-    # Extract synonyms from ai_context (synonyms map to a native Snowflake field)
-    synonyms = _extract_synonyms(metric.get("ai_context"))
-    if synonyms:
-        result["synonyms"] = synonyms
-
-    # Warn about dropped OSI-only fields
-    _warn_dropped_fields(metric, f"metric '{metric_name}'")
+    _warn_dropped_fields(entry, f"{kind} '{name}'")
 
     return result
 
@@ -311,11 +262,10 @@ def _convert_relationship(rel):
             f"same length (got {len(from_cols)} and {len(to_cols)})"
         )
 
-    relationship_columns = []
-    for i in range(len(from_cols)):
-        relationship_columns.append(
-            {"left_column": from_cols[i], "right_column": to_cols[i]}
-        )
+    relationship_columns = [
+        {"left_column": fc, "right_column": tc}
+        for fc, tc in zip(from_cols, to_cols)
+    ]
     if relationship_columns:
         result["relationship_columns"] = relationship_columns
 
@@ -328,13 +278,13 @@ def _convert_relationship(rel):
 def _extract_expression(expression, field_name):
     """Selects the best dialect expression for Snowflake.
 
-    Returns the expression string, or None if the field should be skipped
-    (unsupported dialect only). Raises OsiConversionError if expression
-    is missing entirely.
+    Returns the expression string, or None if only unsupported dialects are
+    present (the field should be skipped). Raises OsiConversionError if the
+    expression or dialects list is missing entirely.
     """
-    if expression is None:
+    if expression is None or not isinstance(expression, dict):
         raise OsiConversionError(
-            f"Missing expression for field/metric '{field_name}'"
+            f"Missing or malformed expression for field/metric '{field_name}'"
         )
 
     dialects = expression.get("dialects")
@@ -358,10 +308,21 @@ def _extract_expression(expression, field_name):
     if ansi_expr:
         return ansi_expr
 
-    raise OsiConversionError(
-        f"Field/metric '{field_name}' has no Snowflake-compatible expression "
-        f"(requires SNOWFLAKE or ANSI_SQL dialect)"
+    dialect_names = [d.get("dialect", "") for d in dialects]
+    warnings.warn(
+        f"Skipping field/metric '{field_name}': no Snowflake-compatible expression "
+        f"(has dialects: {', '.join(dialect_names)}; requires SNOWFLAKE or ANSI_SQL)",
+        stacklevel=3,
     )
+    return None
+
+
+def _normalize_identifier(identifier):
+    """Uppercases an unquoted Snowflake identifier; strips and preserves quoted ones."""
+    stripped = identifier.strip()
+    if stripped.startswith('"') and stripped.endswith('"'):
+        return stripped
+    return stripped.upper()
 
 
 def _parse_source(source):
@@ -388,10 +349,11 @@ def _parse_source(source):
     # handled. Basic dot-splitting only.
     parts = source_stripped.split(".")
     if len(parts) == 3:
+        # Only uppercase unquoted identifiers; preserve quoted ones as-is.
         return {
-            "database": parts[0].upper(),
-            "schema": parts[1].upper(),
-            "table": parts[2].upper(),
+            "database": _normalize_identifier(parts[0]),
+            "schema": _normalize_identifier(parts[1]),
+            "table": _normalize_identifier(parts[2]),
         }
 
     raise OsiConversionError(
@@ -447,7 +409,7 @@ def _warn_dropped_fields(source, context, synonyms_extracted=True):
         warnings.warn(
             f"Dropped from {context} (no Snowflake counterpart): "
             + ", ".join(dropped),
-            stacklevel=3,
+            stacklevel=2,
         )
 
 

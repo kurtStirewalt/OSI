@@ -2,7 +2,7 @@
 
 Converts OSI YAML semantic models to [Snowflake Cortex Analyst](https://docs.snowflake.com/en/user-guide/snowflake-cortex/cortex-analyst) semantic model YAML. Pure offline conversion — no Snowflake connection required.
 
-> **Note:** This converter is under active development. It handles common cases well but has not been thoroughly tested against all edge cases — use with caution in production.
+> **Note:** This converter is under active development. It handles common cases but has not been thoroughly tested against all edge cases — use with caution in production.
 
 ## Setup
 
