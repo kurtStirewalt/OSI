@@ -1,23 +1,15 @@
 # OSI Converters
 
-Standalone converters that transform OSI (Open Semantic Interchange) YAML semantic models into vendor-specific formats. Pure offline tools — no connections required.
+Standalone converters that transform [OSI](../README.md) (Open Semantic Interchange) semantic models into vendor-specific formats. Each converter is a pure offline tool — no external connections required.
 
-## Setup
+## Structure
 
-```bash
-pip3 install -r requirements.txt
-```
+Each subdirectory contains a self-contained converter for a specific target platform, with its own setup instructions, dependencies, and usage documentation. See the README in each converter's directory for details.
 
-## Converters
+## Contributing a Converter
 
-### Snowflake (Cortex Analyst)
+A converter directory should include:
 
-> **Note:** This converter is under active development. It handles common cases well but has not been thoroughly tested against all edge cases — use with caution in production.
-
-Converts OSI YAML to Snowflake Cortex Analyst semantic model YAML.
-
-```bash
-python3 osi_to_snowflake_yaml_converter.py -i input.yaml -o output.yaml
-```
-
-Some OSI concepts (e.g., `ai_context` on relationships) do not have a native counterpart in the Snowflake semantic model. These are dropped during conversion and the converter will emit warnings so you know what was left behind.
+- A **README** with setup and usage instructions
+- Any **dependency/build files** needed to run the converter (e.g., `requirements.txt`, `pom.xml`)
+- The converter source code itself
