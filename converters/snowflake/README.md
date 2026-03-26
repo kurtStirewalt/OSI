@@ -13,7 +13,13 @@ pip3 install -r requirements.txt
 ## Usage
 
 ```bash
-python3 osi_to_snowflake_yaml_converter.py -i input.yaml -o output.yaml
+python3 src/osi_to_snowflake_yaml_converter.py -i input.yaml -o output.yaml
+```
+
+## Tests
+
+```bash
+python3 -m pytest tests/
 ```
 
 ## Limitations
