@@ -633,26 +633,22 @@ class TestWarnDroppedFields:
         assert len(w) == 1
         assert "version" in str(w[0].message)
 
-    def test_ai_context_non_synonym_keys_warned(self):
-        source = {"ai_context": {"synonyms": ["a"], "instructions": "do stuff"}}
+    def test_extra_dropped_included(self):
+        source = {"label": "L"}
         with warnings.catch_warnings(record=True) as w:
             warnings.simplefilter("always")
-            _warn_dropped_fields(source, "field 'x'", synonyms_extracted=True)
+            _warn_dropped_fields(source, "field 'x'",
+                                 extra_dropped=["ai_context (instructions)"])
         assert len(w) == 1
-        assert "instructions" in str(w[0].message)
+        msg = str(w[0].message)
+        assert "ai_context (instructions)" in msg
+        assert "label" in msg
 
-    def test_ai_context_synonyms_only_no_warning(self):
-        source = {"ai_context": {"synonyms": ["a"]}}
+    def test_extra_dropped_only(self):
+        source = {}
         with warnings.catch_warnings(record=True) as w:
             warnings.simplefilter("always")
-            _warn_dropped_fields(source, "field 'x'", synonyms_extracted=True)
-        assert len(w) == 0
-
-    def test_ai_context_dropped_entirely_when_synonyms_not_extracted(self):
-        source = {"ai_context": {"synonyms": ["a"]}}
-        with warnings.catch_warnings(record=True) as w:
-            warnings.simplefilter("always")
-            _warn_dropped_fields(source, "relationship 'r'", synonyms_extracted=False)
+            _warn_dropped_fields(source, "model", extra_dropped=["ai_context"])
         assert len(w) == 1
         assert "ai_context" in str(w[0].message)
 
@@ -719,6 +715,104 @@ class TestDroppedFieldsEndToEnd:
         rel = result["relationships"][0]
         assert "ai_context" not in rel
         assert "synonyms" not in rel
+        assert any("ai_context" in str(x.message) for x in w)
+
+    def test_model_string_ai_context_appended_to_description(self):
+        model = _minimal_model(
+            description="A model",
+            ai_context="use this model for analytics",
+        )
+        with warnings.catch_warnings(record=True) as w:
+            warnings.simplefilter("always")
+            result = yaml.safe_load(convert_osi_to_snowflake(_wrap_osi(model)))
+        assert result["description"] == "A model\nuse this model for analytics"
+        assert not any("ai_context" in str(x.message) for x in w)
+
+    def test_model_string_ai_context_becomes_description_when_none(self):
+        model = _minimal_model(ai_context="use this model for analytics")
+        with warnings.catch_warnings(record=True) as w:
+            warnings.simplefilter("always")
+            result = yaml.safe_load(convert_osi_to_snowflake(_wrap_osi(model)))
+        assert result["description"] == "use this model for analytics"
+        assert not any("ai_context" in str(x.message) for x in w)
+
+    def test_dataset_string_ai_context_appended_to_description(self):
+        model = {
+            "name": "m",
+            "datasets": [
+                {
+                    "name": "t",
+                    "source": "db.s.t",
+                    "description": "A table",
+                    "ai_context": "contains sales data",
+                    "fields": [
+                        {
+                            "name": "c",
+                            "expression": {
+                                "dialects": [
+                                    {"dialect": "ANSI_SQL", "expression": "c"}
+                                ]
+                            },
+                            "dimension": {"is_time": False},
+                        }
+                    ],
+                }
+            ],
+        }
+        with warnings.catch_warnings(record=True) as w:
+            warnings.simplefilter("always")
+            result = yaml.safe_load(convert_osi_to_snowflake(_wrap_osi(model)))
+        assert result["tables"][0]["description"] == "A table\ncontains sales data"
+        assert not any("ai_context" in str(x.message) for x in w)
+
+    def test_field_string_ai_context_appended_to_description(self):
+        model = {
+            "name": "m",
+            "datasets": [
+                {
+                    "name": "t",
+                    "source": "db.s.t",
+                    "fields": [
+                        {
+                            "name": "c",
+                            "description": "A column",
+                            "ai_context": "always filter on this",
+                            "expression": {
+                                "dialects": [
+                                    {"dialect": "ANSI_SQL", "expression": "c"}
+                                ]
+                            },
+                            "dimension": {"is_time": False},
+                        }
+                    ],
+                }
+            ],
+        }
+        with warnings.catch_warnings(record=True) as w:
+            warnings.simplefilter("always")
+            result = yaml.safe_load(convert_osi_to_snowflake(_wrap_osi(model)))
+        dim = result["tables"][0]["dimensions"][0]
+        assert dim["description"] == "A column\nalways filter on this"
+        assert not any("ai_context" in str(x.message) for x in w)
+
+    def test_relationship_string_ai_context_dropped_with_warning(self):
+        model = _minimal_model(
+            relationships=[
+                {
+                    "name": "r1",
+                    "from": "a",
+                    "to": "b",
+                    "from_columns": ["x"],
+                    "to_columns": ["y"],
+                    "ai_context": "these tables are related by key",
+                }
+            ]
+        )
+        with warnings.catch_warnings(record=True) as w:
+            warnings.simplefilter("always")
+            result = yaml.safe_load(convert_osi_to_snowflake(_wrap_osi(model)))
+        rel = result["relationships"][0]
+        assert "description" not in rel
         assert any("ai_context" in str(x.message) for x in w)
 
     def test_field_label_dropped_with_warning(self):

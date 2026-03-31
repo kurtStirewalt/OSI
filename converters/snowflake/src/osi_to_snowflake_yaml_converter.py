@@ -89,6 +89,9 @@ def _convert_model(osi):
     result["name"] = name
 
     description = osi.get("description")
+    ai_context = osi.get("ai_context")
+    if isinstance(ai_context, str) and ai_context:
+        description = f"{description}\n{ai_context}" if description else ai_context
     if description:
         result["description"] = description
 
@@ -117,9 +120,8 @@ def _convert_model(osi):
         if converted_metrics:
             result["metrics"] = converted_metrics
 
-    # Warn about dropped OSI-only fields (model-level synonyms have no Snowflake
-    # counterpart at the root, so treat the entire ai_context as dropped)
-    _warn_dropped_fields(osi, "model", synonyms_extracted=False)
+    dropped_ai = ["ai_context"] if isinstance(ai_context, dict) and ai_context else []
+    _warn_dropped_fields(osi, "model", extra_dropped=dropped_ai)
 
     return result
 
@@ -149,11 +151,14 @@ def _convert_dataset(dataset):
         result["unique_keys"] = [{"columns": uk} for uk in uks]
 
     description = dataset.get("description")
+    ai_context = dataset.get("ai_context")
+    if isinstance(ai_context, str) and ai_context:
+        description = f"{description}\n{ai_context}" if description else ai_context
     if description:
         result["description"] = description
 
     # Extract synonyms from ai_context
-    synonyms = _extract_synonyms(dataset.get("ai_context"))
+    synonyms = _extract_synonyms(ai_context)
     if synonyms:
         result["synonyms"] = synonyms
 
@@ -183,8 +188,12 @@ def _convert_dataset(dataset):
         if facts:
             result["facts"] = facts
 
-    # Warn about dropped OSI-only fields
-    _warn_dropped_fields(dataset, f"dataset '{name}'")
+    dropped_ai = []
+    if isinstance(ai_context, dict):
+        non_synonym_keys = [k for k in ai_context if k != "synonyms"]
+        if non_synonym_keys:
+            dropped_ai = [f"ai_context ({', '.join(non_synonym_keys)})"]
+    _warn_dropped_fields(dataset, f"dataset '{name}'", extra_dropped=dropped_ai)
 
     return result
 
@@ -220,14 +229,22 @@ def _convert_named_expr(entry, kind):
     result["expr"] = expr_str
 
     description = entry.get("description")
+    ai_context = entry.get("ai_context")
+    if isinstance(ai_context, str) and ai_context:
+        description = f"{description}\n{ai_context}" if description else ai_context
     if description:
         result["description"] = description
 
-    synonyms = _extract_synonyms(entry.get("ai_context"))
+    synonyms = _extract_synonyms(ai_context)
     if synonyms:
         result["synonyms"] = synonyms
 
-    _warn_dropped_fields(entry, f"{kind} '{name}'")
+    dropped_ai = []
+    if isinstance(ai_context, dict):
+        non_synonym_keys = [k for k in ai_context if k != "synonyms"]
+        if non_synonym_keys:
+            dropped_ai = [f"ai_context ({', '.join(non_synonym_keys)})"]
+    _warn_dropped_fields(entry, f"{kind} '{name}'", extra_dropped=dropped_ai)
 
     return result
 
@@ -269,8 +286,8 @@ def _convert_relationship(rel):
     if relationship_columns:
         result["relationship_columns"] = relationship_columns
 
-    # Warn about dropped OSI-only fields (relationships have no native synonyms)
-    _warn_dropped_fields(rel, f"relationship '{rel_name}'", synonyms_extracted=False)
+    dropped_ai = ["ai_context"] if rel.get("ai_context") else []
+    _warn_dropped_fields(rel, f"relationship '{rel_name}'", extra_dropped=dropped_ai)
 
     return result
 
@@ -303,16 +320,15 @@ def _extract_expression(expression, field_name):
         elif dialect_name == "ANSI_SQL":
             ansi_expr = d.get("expression")
 
-    if snowflake_expr:
+    if snowflake_expr is not None:
         return snowflake_expr
-    if ansi_expr:
+    if ansi_expr is not None:
         return ansi_expr
 
     dialect_names = [d.get("dialect", "") for d in dialects]
     warnings.warn(
         f"Skipping field/metric '{field_name}': no Snowflake-compatible expression "
-        f"(has dialects: {', '.join(dialect_names)}; requires SNOWFLAKE or ANSI_SQL)",
-        stacklevel=3,
+        f"(has dialects: {', '.join(dialect_names)}; requires SNOWFLAKE or ANSI_SQL)"
     )
     return None
 
@@ -345,6 +361,8 @@ def _parse_source(source):
                           "WITH ", "WITH\n", "WITH\t")):
         return {"definition": source_stripped}
 
+    # Strict 3-part rule: source must be db.schema.table. This may be relaxed
+    # in the future to allow 1- or 2-part names.
     # TODO: Quoted identifiers (e.g., "my.db"."my schema"."my table") are not
     # handled. Basic dot-splitting only.
     parts = source_stripped.split(".")
@@ -374,27 +392,19 @@ def _extract_synonyms(ai_context):
     return None
 
 
-def _warn_dropped_fields(source, context, synonyms_extracted=True):
+def _warn_dropped_fields(source, context, extra_dropped=None):
     """Warns about OSI fields that have no Snowflake counterpart and are dropped.
+
+    Checks for universally-dropped fields (custom_extensions, label, version).
+    Callers handle ai_context warnings themselves since consumption logic varies.
 
     Args:
         source: The OSI dict being converted.
         context: Human-readable description (e.g., "field 'col1'").
-        synonyms_extracted: If True, ai_context.synonyms are mapped to
-            Snowflake's native synonyms field, so only non-synonym ai_context
-            keys are reported as dropped. If False (e.g., for relationships),
-            the entire ai_context is dropped.
+        extra_dropped: Optional list of additional field descriptions to report
+            as dropped (e.g., ai_context details computed by the caller).
     """
-    dropped = []
-
-    ai_context = source.get("ai_context")
-    if ai_context:
-        if synonyms_extracted and isinstance(ai_context, dict):
-            non_synonym_keys = [k for k in ai_context if k != "synonyms"]
-            if non_synonym_keys:
-                dropped.append(f"ai_context ({', '.join(non_synonym_keys)})")
-        else:
-            dropped.append("ai_context")
+    dropped = list(extra_dropped) if extra_dropped else []
 
     if source.get("custom_extensions"):
         dropped.append("custom_extensions")
@@ -408,8 +418,7 @@ def _warn_dropped_fields(source, context, synonyms_extracted=True):
     if dropped:
         warnings.warn(
             f"Dropped from {context} (no Snowflake counterpart): "
-            + ", ".join(dropped),
-            stacklevel=2,
+            + ", ".join(dropped)
         )
 
 
