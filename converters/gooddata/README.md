@@ -1,6 +1,6 @@
-# GoodData OSI Convertor
+# GoodData OSI Converter
 
-Bidirectional convertor between GoodData's declarative Logical Data Model (LDM)
+Bidirectional converter between GoodData's declarative Logical Data Model (LDM)
 and the [OSI (Open Semantic Interchange)](https://github.com/open-semantic-interchange/OSI)
 semantic model specification.
 

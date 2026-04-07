@@ -1,4 +1,4 @@
-"""Shared pytest fixtures for gooddata-osi convertor tests."""
+"""Shared pytest fixtures for gooddata-osi converter tests."""
 
 from __future__ import annotations
 
