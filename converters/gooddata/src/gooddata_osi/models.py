@@ -10,7 +10,8 @@ GoodData LDM structure (from declarative API):
         │   ├── attributes[] {id, title, description, sourceColumn, sourceColumnDataType,
         │   │                  sortColumn, sortDirection, labels[], tags}
         │   ├── facts[] {id, title, description, sourceColumn, sourceColumnDataType, tags}
-        │   ├── references[] {identifier{id, type}, multivalue, sourceColumns[]}
+        │   ├── references[] {identifier{id, type}, multivalue,
+        │   │                  sources[] {column, dataType, target{id, type}}}
         │   └── workspaceDataFilterReferences[]
         └── dateInstances[]
             ├── id, title, description, tags
@@ -79,9 +80,22 @@ class GdReferenceIdentifier:
 
 
 @dataclass
+class GdReferenceTarget:
+    id: str
+    type: str = "attribute"
+
+
+@dataclass
+class GdReferenceSource:
+    column: str
+    target: GdReferenceTarget
+    data_type: str | None = None
+
+
+@dataclass
 class GdReference:
     identifier: GdReferenceIdentifier
-    source_columns: list[str] = field(default_factory=list)
+    sources: list[GdReferenceSource] = field(default_factory=list)
     multivalue: bool = False
 
 
@@ -186,10 +200,27 @@ def gd_model_from_dict(data: dict[str, Any]) -> GdDeclarativeModel:
         references = []
         for ref in ds.get("references", []):
             ident = ref["identifier"]
+            if "sources" not in ref:
+                raise ValueError(
+                    f"Dataset '{ds['id']}' reference to '{ident['id']}' is missing 'sources'. "
+                    "The legacy 'sourceColumns' format is not supported; please upgrade the LDM "
+                    "to the new 'sources' format (see DeclarativeReferenceSource in GoodData backend)."
+                )
+            sources = [
+                GdReferenceSource(
+                    column=s["column"],
+                    target=GdReferenceTarget(
+                        id=s["target"]["id"],
+                        type=s["target"].get("type", "attribute"),
+                    ),
+                    data_type=s.get("dataType"),
+                )
+                for s in ref["sources"]
+            ]
             references.append(
                 GdReference(
                     identifier=GdReferenceIdentifier(id=ident["id"], type=ident.get("type", "dataset")),
-                    source_columns=ref.get("sourceColumns", []),
+                    sources=sources,
                     multivalue=ref.get("multivalue", False),
                 )
             )
@@ -246,14 +277,7 @@ def gd_model_to_dict(model: GdDeclarativeModel) -> dict[str, Any]:
             "id": ds.id,
             "title": ds.title,
             "grain": [{"id": g.id, "type": g.type} for g in ds.grain],
-            "references": [
-                {
-                    "identifier": {"id": ref.identifier.id, "type": ref.identifier.type},
-                    "multivalue": ref.multivalue,
-                    "sourceColumns": ref.source_columns,
-                }
-                for ref in ds.references
-            ],
+            "references": [_reference_to_dict(ref) for ref in ds.references],
             "attributes": [_attr_to_dict(a) for a in ds.attributes],
             "facts": [_fact_to_dict(f) for f in ds.facts],
         }
@@ -287,6 +311,23 @@ def gd_model_to_dict(model: GdDeclarativeModel) -> dict[str, Any]:
         date_instances.append(di_dict)
 
     return {"ldm": {"datasets": datasets, "dateInstances": date_instances}}
+
+
+def _reference_to_dict(ref: GdReference) -> dict[str, Any]:
+    sources = []
+    for s in ref.sources:
+        sd: dict[str, Any] = {
+            "column": s.column,
+            "target": {"id": s.target.id, "type": s.target.type},
+        }
+        if s.data_type is not None:
+            sd["dataType"] = s.data_type
+        sources.append(sd)
+    return {
+        "identifier": {"id": ref.identifier.id, "type": ref.identifier.type},
+        "multivalue": ref.multivalue,
+        "sources": sources,
+    }
 
 
 def _attr_to_dict(a: GdAttribute) -> dict[str, Any]:

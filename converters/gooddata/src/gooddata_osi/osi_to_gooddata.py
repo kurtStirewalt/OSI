@@ -19,6 +19,8 @@ from gooddata_osi.models import (
     GdLdm,
     GdReference,
     GdReferenceIdentifier,
+    GdReferenceSource,
+    GdReferenceTarget,
 )
 
 # Regex to extract fact/label references from MAQL expressions
@@ -42,19 +44,46 @@ def osi_to_gooddata(
     datasets: list[GdDataset] = []
     date_instances: list[GdDateInstance] = []
 
-    # Build a lookup of relationship info: from_dataset -> [(to_dataset, from_columns)]
-    # and reverse: to_dataset -> from_columns (to know the target's join columns)
     for sm in osi_model.get("semantic_model", []):
         relationship_map = _build_relationship_map(sm)
+        # Pre-pass: for each OSI dataset, record whether it is a date instance
+        # and map its physical source columns to the attribute ids that will
+        # be generated. Reference target columns resolve via this map.
+        target_info = _build_target_info(sm)
 
         for ds in sm.get("datasets", []):
-            gd_ds, date_inst = _convert_osi_dataset(ds, relationship_map, data_source_id)
+            gd_ds, date_inst = _convert_osi_dataset(
+                ds, relationship_map, target_info, data_source_id,
+            )
             if date_inst:
                 date_instances.append(date_inst)
             else:
                 datasets.append(gd_ds)
 
     return GdDeclarativeModel(ldm=GdLdm(datasets=datasets, date_instances=date_instances))
+
+
+def _build_target_info(sm: dict[str, Any]) -> dict[str, dict[str, Any]]:
+    """For each dataset: {is_date: bool, col_to_attr_id: {source_col -> attr id}}."""
+    info: dict[str, dict[str, Any]] = {}
+    for ds in sm.get("datasets", []):
+        ds_name = ds["name"]
+        is_date = _is_date_dataset(ds)
+        col_to_attr: dict[str, str] = {}
+        if not is_date:
+            for f in ds.get("fields", []):
+                src = _get_source_column(f)
+                col_to_attr[src] = f"attr.{ds_name}.{f['name']}"
+        info[ds_name] = {"is_date": is_date, "col_to_attr": col_to_attr}
+    return info
+
+
+def _is_date_dataset(ds: dict[str, Any]) -> bool:
+    gd_ext = _get_gooddata_extension(ds)
+    if gd_ext and gd_ext.get("date_dimension"):
+        return True
+    fields = ds.get("fields", [])
+    return bool(fields) and all(_is_time_field(f) for f in fields) and not gd_ext
 
 
 def _build_relationship_map(
@@ -71,6 +100,7 @@ def _build_relationship_map(
 def _convert_osi_dataset(
     ds: dict[str, Any],
     relationship_map: dict[str, list[dict[str, Any]]],
+    target_info: dict[str, dict[str, Any]],
     data_source_id: str,
 ) -> tuple[GdDataset, GdDateInstance | None]:
     """Convert an OSI dataset to a GoodData dataset or date instance."""
@@ -120,13 +150,7 @@ def _convert_osi_dataset(
     # Convert relationships from this dataset to GoodData references
     references = []
     for rel in relationship_map.get(ds_name, []):
-        references.append(
-            GdReference(
-                identifier=GdReferenceIdentifier(id=rel["to"], type="dataset"),
-                source_columns=rel.get("from_columns", []),
-                multivalue=_is_multivalue(rel),
-            )
-        )
+        references.append(_convert_relationship(rel, target_info))
 
     # Build data source table reference from source string
     ds_table_id = _parse_source_to_table_id(source, data_source_id)
@@ -256,6 +280,36 @@ def _get_title(obj: dict[str, Any], fallback: str = "") -> str:
 def _is_time_field(field_def: dict[str, Any]) -> bool:
     dim = field_def.get("dimension")
     return isinstance(dim, dict) and dim.get("is_time") is True
+
+
+def _convert_relationship(
+    rel: dict[str, Any],
+    target_info: dict[str, dict[str, Any]],
+) -> GdReference:
+    to_ds = rel["to"]
+    from_columns: list[str] = rel.get("from_columns", [])
+    to_columns: list[str] = rel.get("to_columns", from_columns)
+
+    target_meta = target_info.get(to_ds, {"is_date": False, "col_to_attr": {}})
+    sources: list[GdReferenceSource] = []
+    for from_col, to_col in zip(from_columns, to_columns):
+        if target_meta["is_date"]:
+            target = GdReferenceTarget(id=to_ds, type="date")
+        else:
+            attr_id = target_meta["col_to_attr"].get(to_col)
+            if attr_id is None:
+                raise ValueError(
+                    f"Relationship '{rel.get('name', from_col)}': target column "
+                    f"'{to_col}' not found as a field of dataset '{to_ds}'."
+                )
+            target = GdReferenceTarget(id=attr_id, type="attribute")
+        sources.append(GdReferenceSource(column=from_col, target=target))
+
+    return GdReference(
+        identifier=GdReferenceIdentifier(id=to_ds, type="dataset"),
+        sources=sources,
+        multivalue=_is_multivalue(rel),
+    )
 
 
 def _is_multivalue(rel: dict[str, Any]) -> bool:

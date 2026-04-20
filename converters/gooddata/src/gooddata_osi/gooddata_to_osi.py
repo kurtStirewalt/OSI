@@ -12,6 +12,7 @@ from gooddata_osi.models import (
     GdDeclarativeModel,
     GdFact,
     GdLabel,
+    GdReference,
 )
 
 OSI_VERSION = "0.1.1"
@@ -37,14 +38,15 @@ def gooddata_to_osi(
     osi_datasets = []
     osi_relationships = []
 
-    # Map dataset id -> grain attribute ids (used as primary keys in OSI)
-    dataset_grain_map: dict[str, list[str]] = {}
+    # Map dataset id -> {attribute id -> source column}. Reference targets point
+    # at a grain attribute id; OSI relationships need the physical column name.
+    attr_source_col_map: dict[str, dict[str, str]] = {}
     for ds in model.ldm.datasets:
-        dataset_grain_map[ds.id] = [g.id for g in ds.grain]
+        attr_source_col_map[ds.id] = {a.id: a.source_column for a in ds.attributes}
 
     # Convert regular datasets
     for ds in model.ldm.datasets:
-        osi_ds, rels = _convert_dataset(ds)
+        osi_ds, rels = _convert_dataset(ds, attr_source_col_map)
         osi_datasets.append(osi_ds)
         osi_relationships.extend(rels)
 
@@ -79,7 +81,10 @@ def gooddata_to_osi(
     }
 
 
-def _convert_dataset(ds: GdDataset) -> tuple[dict[str, Any], list[dict[str, Any]]]:
+def _convert_dataset(
+    ds: GdDataset,
+    attr_source_col_map: dict[str, dict[str, str]],
+) -> tuple[dict[str, Any], list[dict[str, Any]]]:
     """Convert a GoodData dataset to an OSI dataset + relationships."""
     # Build source from dataSourceTableId
     source = _build_source(ds)
@@ -109,7 +114,7 @@ def _convert_dataset(ds: GdDataset) -> tuple[dict[str, Any], list[dict[str, Any]
     # Convert references to OSI relationships
     relationships = []
     for ref in ds.references:
-        rel = _convert_reference(ds.id, ref.identifier.id, ref.source_columns, ref.multivalue)
+        rel = _convert_reference(ds.id, ref, attr_source_col_map)
         relationships.append(rel)
 
     return osi_ds, relationships
@@ -184,19 +189,42 @@ def _convert_fact(fact: GdFact, dataset_id: str) -> dict[str, Any]:
 
 def _convert_reference(
     from_dataset: str,
-    to_dataset: str,
-    source_columns: list[str],
-    multivalue: bool,
+    ref: GdReference,
+    attr_source_col_map: dict[str, dict[str, str]],
 ) -> dict[str, Any]:
-    """Convert a GoodData reference to an OSI relationship."""
+    """Convert a GoodData reference to an OSI relationship.
+
+    Each source carries an explicit `target` grain identifier. For attribute
+    targets the target column is resolved via the target dataset's attribute
+    id -> source_column map. For date targets (pointing at a date instance,
+    which has no physical columns) the source column is used as-is.
+    """
+    to_dataset = ref.identifier.id
+    target_cols_by_ds = attr_source_col_map.get(to_dataset, {})
+
+    from_columns: list[str] = []
+    to_columns: list[str] = []
+    for s in ref.sources:
+        from_columns.append(s.column)
+        if s.target.type == "attribute":
+            col = target_cols_by_ds.get(s.target.id)
+            if col is None:
+                raise ValueError(
+                    f"Reference {from_dataset} -> {to_dataset}: target attribute "
+                    f"'{s.target.id}' not found in target dataset."
+                )
+            to_columns.append(col)
+        else:
+            to_columns.append(s.column)
+
     rel: dict[str, Any] = {
         "name": f"{from_dataset}_to_{to_dataset}",
         "from": from_dataset,
         "to": to_dataset,
-        "from_columns": source_columns,
-        "to_columns": source_columns,
+        "from_columns": from_columns,
+        "to_columns": to_columns,
     }
-    if multivalue:
+    if ref.multivalue:
         rel["custom_extensions"] = [
             {"vendor_name": "GOODDATA", "data": json.dumps({"multivalue": True})},
         ]

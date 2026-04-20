@@ -64,22 +64,34 @@
         "references": [
           {
             "identifier": {"id": "date_dim", "type": "dataset"},
-            "sourceColumns": ["ss_sold_date_sk"],
+            "sources": [
+              {"column": "ss_sold_date_sk", "dataType": "INT",
+               "target": {"id": "date_dim", "type": "date"}}
+            ],
             "multivalue": false
           },
           {
             "identifier": {"id": "customer", "type": "dataset"},
-            "sourceColumns": ["ss_customer_sk"],
+            "sources": [
+              {"column": "ss_customer_sk", "dataType": "INT",
+               "target": {"id": "attr.customer.c_customer_sk", "type": "attribute"}}
+            ],
             "multivalue": false
           },
           {
             "identifier": {"id": "item", "type": "dataset"},
-            "sourceColumns": ["ss_item_sk"],
+            "sources": [
+              {"column": "ss_item_sk", "dataType": "INT",
+               "target": {"id": "attr.item.i_item_sk", "type": "attribute"}}
+            ],
             "multivalue": false
           },
           {
             "identifier": {"id": "store", "type": "dataset"},
-            "sourceColumns": ["ss_store_sk"],
+            "sources": [
+              {"column": "ss_store_sk", "dataType": "INT",
+               "target": {"id": "attr.store.s_store_sk", "type": "attribute"}}
+            ],
             "multivalue": false
           }
         ],

@@ -199,16 +199,16 @@ semantic_model:
         from: store_sales
         to: customer
         from_columns: [ss_customer_sk]
-        to_columns: [ss_customer_sk]
+        to_columns: [c_customer_sk]
 
       - name: store_sales_to_item
         from: store_sales
         to: item
         from_columns: [ss_item_sk]
-        to_columns: [ss_item_sk]
+        to_columns: [i_item_sk]
 
       - name: store_sales_to_store
         from: store_sales
         to: store
         from_columns: [ss_store_sk]
-        to_columns: [ss_store_sk]
+        to_columns: [s_store_sk]

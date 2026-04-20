@@ -17,6 +17,7 @@ dialects:
   - "MDX"                   # Multi-Dimensional Expressions
   - "TABLEAU"               # Tableau
   - "DATABRICKS"            # Databricks SQL
+  - "MAQL"                  # GoodData MAQL (Multi-Dimensional Analytical Query Language)
 
 
 
@@ -27,6 +28,7 @@ vendors:
   - "SALESFORCE"
   - "DBT"
   - "DATABRICKS"
+  - "GOODDATA"
 
  
 # Top-level semantic model definition

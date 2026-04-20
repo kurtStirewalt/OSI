@@ -10,9 +10,6 @@ dependencies = [
     "jsonschema>=4.23.0",
 ]
 
-[tool.uv]
-python-preference = "only-system"
-
 [dependency-groups]
 dev = [
     "ruff>=0.11.5",
