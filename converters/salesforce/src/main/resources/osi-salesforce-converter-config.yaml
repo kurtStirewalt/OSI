@@ -1,0 +1,29 @@
+# Pipeline definitions - each direction lists handlers to execute in order
+
+pipelines:
+  osiToSalesforce:
+    - DatasetMappingHandler
+    - FieldMappingHandler
+    - RelationshipMappingHandler
+    - MetricMappingHandler
+    - SemanticModelMappingHandler
+
+  salesforceToOsi:
+    - DatasetMappingHandler
+    - FieldMappingHandler
+    - RelationshipMappingHandler
+    - MetricMappingHandler
+    - SemanticModelMappingHandler
+
+# Direction-specific configuration
+osiToSalesforce:
+  inputFormat: yaml
+  outputFormat: json
+  schemaPath: /schemas/osi-schema.json
+  extractModelNameFrom: apiName
+
+salesforceToOsi:
+  inputFormat: json
+  outputFormat: yaml
+  schemaPath: /schemas/salesforce-semantic-model-schema.json
+  extractModelNameFrom: name

@@ -1,0 +1,30 @@
+# =============================================================================
+# OSI-Salesforce Converter - Mapping Configuration
+# =============================================================================
+#
+# This file defines ONLY straightforward property mappings between OSI YAML 
+# format and Salesforce Semantic Model JSON format.
+#
+# Complex mappings (arrays, routing, transformations) are handled programmatically
+# by special handlers and are NOT listed here.
+#
+# Format:
+#     osiPath: salesforcePath
+#
+# =============================================================================
+
+
+  name: apiName
+  description: description
+
+  datasets: semanticDataObjects
+  datasets.name: semanticDataObjects.apiName
+  datasets.source: semanticDataObjects.dataObjectName
+  datasets.description: semanticDataObjects.description
+
+  relationships: semanticRelationships
+  relationships.name: semanticRelationships.apiName
+
+  metrics: semanticCalculatedMeasurements
+  metrics.name: semanticCalculatedMeasurements.apiName
+  metrics.description: semanticCalculatedMeasurements.description
