@@ -14,12 +14,12 @@ These are the strategic initiatives where working groups are actively driving sp
 
 ---
 
-### Metric Semantics & Computation Model
+### Metric Semantics & Core Semantic Model
 
-**Goal:** Enable expressive, composable, and well-defined semantic models.
+**Goal:** Enable expressive, composable, and well-defined semantic models with clear entity, relationship, and grain semantics.
 
 **Motivation:**
-The current model lacks sufficient support for metrics at different grains, filters, aggregation semantics, and relationships between metrics.
+The current model lacks sufficient support for metrics at different grains, filters, aggregation semantics, and relationships between metrics. Ambiguity in how entities, joins, and grain are represented limits interoperability.
 
 **Key Discussions:**
 
@@ -28,35 +28,22 @@ The current model lacks sufficient support for metrics at different grains, filt
 - [Structured aggregation_method for Metrics](https://github.com/open-semantic-interchange/OSI/discussions/19)
 - [Add "entity / grain" as a first-class concept](https://github.com/open-semantic-interchange/OSI/discussions/12)
 - [Add explicit datasets reference to Metrics](https://github.com/open-semantic-interchange/OSI/discussions/18)
+- [Relationship Semantics](https://github.com/open-semantic-interchange/OSI/discussions/24)
+- [Complex Relationship Definitions](https://github.com/open-semantic-interchange/OSI/discussions/4)
+- [Make Relationship Cardinality Explicit](https://github.com/open-semantic-interchange/OSI/discussions/50)
+- [Inner join in relationships](https://github.com/open-semantic-interchange/OSI/discussions/11)
+- [Support for cross-dataset dimensions & single-dataset measures](https://github.com/open-semantic-interchange/OSI/discussions/27)
+- [Semantic Filters](https://github.com/open-semantic-interchange/OSI/discussions/5)
 
 **Roadmap Deliverables:**
 
 - Standard metrics specification language
 - First-class aggregation, relationship, and grain semantics, including a specification that documents the expected behavior that the community has aligned on
 - Support for derived and cumulative metrics
-
----
-
-### Core Semantic Model (Entities, Relationships, Grain)
-
-**Goal:** Strengthen OSI as a true semantic modeling layer.
-
-**Motivation:**
-Ambiguity in how entities, joins, and grain are represented limits interoperability.
-
-**Key Discussions:**
-
-- [Relationship Semantics](https://github.com/open-semantic-interchange/OSI/discussions/24)
-- [Complex Relationship Definitions](https://github.com/open-semantic-interchange/OSI/discussions/4)
-- [Make Relationship Cardinality Explicit](https://github.com/open-semantic-interchange/OSI/discussions/50)
-- [Inner join in relationships](https://github.com/open-semantic-interchange/OSI/discussions/11)
-- [Support for cross-dataset dimensions & single-dataset measures](https://github.com/open-semantic-interchange/OSI/discussions/27)
-
-**Roadmap Deliverables:**
-
 - Explicit entity modeling
-- Enahnced relationship definitions & capabilities
+- Enhanced relationship definitions & capabilities
 - Cross-domain modeling support
+- Reusable semantic filter definitions
 
 ---
 
@@ -110,18 +97,21 @@ Users want reusable semantic models independent of underlying tables or views.
 
 ---
 
-### Inbound Semantic Query Language (SQL++)
+### Semantic Query Language & Reference Engine
 
-**Goal:** Define a standard query interface for interacting with OSI models.
+**Goal:** Define a standard query interface for interacting with OSI models and provide a canonical implementation for interpreting and executing them.
 
 **Motivation:**
-Consumers (BI tools, AI systems, APIs) need a consistent way to query semantic models independent of underlying SQL dialects.
+Consumers (BI tools, AI systems, APIs) need a consistent way to query semantic models independent of underlying SQL dialects. A reference engine ensures consistent interpretation of the spec and accelerates ecosystem adoption.
 
 **Roadmap Deliverables:**
 
 - Standard semantic query language (OSI-native or SQL-extended)
 - Mapping from semantic queries → execution plans
 - Support for metrics, dimensions, filters, and relationships
+- Reference compiler from OSI → SQL
+- Canonical handling of joins, aggregations, and filters
+- Test suite to validate conformance across implementations
 
 **Related Issues & PRs:**
 
@@ -253,21 +243,6 @@ Organizations repeatedly recreate similar semantic models (e.g., SaaS, finance, 
 
 ---
 
-### Reference Engine Implementation (Compilation / SQL Generation)
-
-**Goal:** Provide a canonical implementation for interpreting and executing OSI models.
-
-**Motivation:**
-A reference engine ensures consistent interpretation of the spec and accelerates ecosystem adoption.
-
-**Roadmap Deliverables:**
-
-- Reference compiler from OSI → SQL
-- Canonical handling of joins, aggregations, and filters
-- Test suite to validate conformance across implementations
-
----
-
 ## Enhancements & Additions (Incremental Improvements)
 
 These items improve usability, clarity, and completeness without fundamentally changing the spec.
@@ -373,43 +348,24 @@ New adopters and tool authors need clearer documentation, real-world samples, an
 
 ---
 
-### Additional Modeling Constructs
-
-**Goal:** Expand OSI's expressiveness to cover common modeling patterns that are currently unsupported.
-
-**Motivation:**
-Practitioners frequently need to model dimension groupings, audience segments, and reusable filter definitions. Without native support, these patterns are implemented inconsistently across tools.
-
-**Roadmap Deliverables:**
-
-- Dimension grouping and organization primitives
-- Audience / segment definitions as first-class constructs
-- Reusable semantic filter definitions
-
-**Key Discussions:**
-
-- [Dimension Groups](https://github.com/open-semantic-interchange/OSI/discussions/20)
-- [Add Support for Audiences](https://github.com/open-semantic-interchange/OSI/discussions/51)
-- [Semantic Filters](https://github.com/open-semantic-interchange/OSI/discussions/5)
-
----
-
 ### Specialized Capabilities
 
-**Goal:** Extend OSI to support domain-specific data types and patterns that go beyond traditional tabular analytics.
+**Goal:** Extend OSI to support domain-specific data types, audience definitions, and patterns that go beyond traditional tabular analytics.
 
 **Motivation:**
-Geospatial analytics and time-series modeling have unique requirements (spatial types, geographic hierarchies, date spines) that benefit from first-class spec support rather than ad-hoc workarounds.
+Geospatial analytics, time-series modeling, and audience segmentation have unique requirements that benefit from first-class spec support rather than ad-hoc workarounds.
 
 **Roadmap Deliverables:**
 
 - Spatial field types, spatial relationships, and geographic hierarchies
 - Date spine model support for time-series alignment and gap-filling
+- Audience / segment definitions as first-class constructs
 
 **Key Discussions:**
 
 - [Geospatial data support: spatial field types, spatial relationships, and geographic hierarchies](https://github.com/open-semantic-interchange/OSI/discussions/69)
 - [Date Spine models](https://github.com/open-semantic-interchange/OSI/discussions/47)
+- [Add Support for Audiences](https://github.com/open-semantic-interchange/OSI/discussions/51)
 
 ---
 
