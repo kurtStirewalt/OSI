@@ -35,6 +35,7 @@ Supported SQL and expression language dialects for metrics and field definitions
 | `MDX` | Multi-Dimensional Expressions |
 | `TABLEAU` | Tableau calculations |
 | `DATABRICKS` | Databricks SQL |
+| `MAQL` | GoodData MAQL (Metric Analysis and Query Language) |
 
 ### Vendors
 
@@ -47,6 +48,7 @@ Supported vendors for custom extensions and integrations.
 | `SALESFORCE` | Salesforce/Tableau-specific attributes |
 | `DBT` | dbt-specific attributes |
 | `DATABRICKS` | Databricks-specific attributes |
+| `GOODDATA` | GoodData-specific attributes |
 
 ## Semantic Model
 

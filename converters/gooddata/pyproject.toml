@@ -1,0 +1,40 @@
+[project]
+name = "gooddata-osi"
+version = "0.1.0"
+description = "Bidirectional converter between GoodData LDM and OSI semantic model"
+authors = [{name = "GoodData Corporation", email = "support@gooddata.com"}]
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "pyyaml>=6.0.1",
+]
+
+[dependency-groups]
+dev = [
+    "ruff>=0.11.5",
+    "pytest>=8.3.5",
+    "pytest-cov>=6.0.0",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build]
+include = ["src/gooddata_osi/**/*"]
+ignore-vcs = true
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/gooddata_osi"]
+
+[tool.ruff]
+line-length = 120
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "N", "UP", "W", "C4", "PIE", "SIM"]
+ignore = ["E501"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
