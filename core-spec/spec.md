@@ -13,10 +13,12 @@
 1. [Enumerations](#enumerations)
 2. [Semantic Model](#semantic-model)
 3. [Datasets](#datasets)
-4. [Relationships](#relationships)
+4. [Join paths](#join-paths)
 5. [Fields](#fields)
 6. [Metrics](#metrics)
-7. [Examples](#examples)
+7. [Concepts](#concepts)
+8. [Mappings](#mappings)
+9. [Complete Example](#complete-example)
 
 ---
 
@@ -37,6 +39,15 @@ Supported SQL and expression language dialects for metrics and field definitions
 | `DATABRICKS` | Databricks SQL |
 | `MAQL` | GoodData MAQL (Metric Analysis and Query Language) |
 
+### Multiplicities
+
+The allowable multiplicities of relationships defined in the [Concepts](#concepts) section.
+
+| Multiplicity | Description |
+|---------|-------------|
+| `ManyToOne` | The last role of a relationship is uniquely determined by the other roles |
+| `OneToOne` | The relationship is ManyToMany in both directions (only for binary relationships) |
+
 ### Vendors
 
 Supported vendors for custom extensions and integrations.
@@ -52,7 +63,7 @@ Supported vendors for custom extensions and integrations.
 
 ## Semantic Model
 
-The top-level container that represents a complete semantic model, including datasets, relationships, and  metrics.
+The top-level container that represents a complete semantic model, including datasets, join paths, and  metrics.
 
 ### Schema
 
@@ -62,7 +73,7 @@ The top-level container that represents a complete semantic model, including dat
 | `description` | string | No | Human-readable description |
 | `ai_context` | string/object | No | Additional context for AI tools (e.g., custom instructions) |
 | `datasets` | array | Yes | Collection of logical datasets (fact and dimension tables) |
-| `relationships` | array | No | Defines how logical datasets are connected |
+| `join_paths` | array | No | Defines how logical datasets are connected |
 | `metrics` | array | No | Quantifiable measures defined as aggregate expessions on fields from logical datsets |
 | `custom_extensions` | array | No | Vendor-specific attributes for extensibility |
 
@@ -75,7 +86,7 @@ semantic_model:
     ai_context:
       instructions: "Use this model for sales analysis and customer insights"
     datasets: []
-    relationships: []
+    join_paths: []
     metrics: []
     custom_extensions:
       - vendor_name: DBT
@@ -143,17 +154,17 @@ datasets:
 
 ---
 
-## Relationships
+## Join paths
 
-Relationships define how logical datasets are connected through foreign key constraints. They support both simple and composite keys.
+Join paths define how logical datasets are connected through foreign key constraints. They support both simple and composite keys.
 
 ### Schema
 
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
-| `name` | string | Yes | Unique identifier for the relationship |
-| `from` | string | Yes | The logical dataset on the many side of the relationship |
-| `to` | string | Yes | The logical dataset on the one side of the relationship |
+| `name` | string | Yes | Unique identifier for the join path |
+| `from` | string | Yes | The logical dataset on the many side of the join path |
+| `to` | string | Yes | The logical dataset on the one side of the join path |
 | `from_columns` | array | Yes | Array of column names in the "from" dataset (foreign key columns) |
 | `to_columns` | array | Yes | Array of column names in the "to" dataset (primary or unique key columns) |
 | `ai_context` | string/object | No | Additional context for AI tools |
@@ -163,12 +174,12 @@ Relationships define how logical datasets are connected through foreign key cons
 
 - The order of columns in `from_columns` must correspond to the order in `to_columns`
 - Both arrays must have the same number of columns
-- For simple relationships, use a single column: `[column1]`
-- For composite relationships, use multiple columns: `[column1, column2]`
+- For simple join paths, use a single column: `[column1]`
+- For composite join paths, use multiple columns: `[column1, column2]`
 
 ### Examples
 
-**Simple Relationship:**
+**Simple Join Path:**
 
 ```yaml
 - name: orders_to_customers
@@ -178,7 +189,7 @@ Relationships define how logical datasets are connected through foreign key cons
   to_columns: [id]
 ```
 
-**Composite Relationship:**
+**Composite Join Path:**
 
 ```yaml
 # order_lines.product_id = products.id AND order_lines.variant_id = products.variant_id
@@ -412,6 +423,206 @@ custom_extensions:
 
 ---
 
+## Concepts
+
+Concepts represent the types of things that have meaning in a business setting, e.g., person, company, or
+salary. Each concept is either an entity type or a value type. Every ontology starts with a value-type
+concept for each basic data type, like `Integer`, `Decimal`, and `String`, and an entity-type concept
+called `Any`. Every other concept in the ontology extends one of these starter concepts.
+
+### Schema
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `name` | string | Yes | Unique identifier for this concept |
+| `description` | string | No | Human-readable description |
+| `relationships` | object | No | Relationships where this concept plays the first role |
+| `extends` | list | No | Names of this concept's supertypes |
+| `derived_by` | list | No | Expressions for deriving this concept's population |
+| `identify_by` | list | No | Names of relationships that collectively identify this concept |
+| `requires` | list | No | Expressions that constrain this concept's population |
+
+### Extends
+
+Every concept that a user declares extends one or more concepts in the ontology. The new concept
+is a sutype of each concept that it extends, and the extended concepts are its supertypes. For instance,`SocialSecurityNr` extends `Integer`, `Person` extends `Any`, and `Employee` extends `Person`. Any
+concept that directly or indirectly extends a value type like `Integer` or `String` is a value type.
+A concept is an entity type if it is not a value type. Any concept with an empty extends list defaults
+to being a subtype of `Any` and so is an entity type.
+
+### Relationships
+
+Relationships relate objects of one or more concepts and declare how to verbalize links among those objects.
+For instance, a relationship named `earns` links persons to salaries. Each link pairs some `Person` with
+some `Salary` and verbalizes as, “Person earns Salary annually.” Relationships have set (as opposed to bag)
+semantics, and links do not contain nulls.
+
+#### Schema
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `name` | string | Yes | Part of the identifier for this relationship |
+| `description` | string | No | Human-readable description |
+| `multiplicity` | enum | No | Multiplicity constraint |
+| `roles` | list | No | List of additional roles in this relationship |
+| `derived_by` | list | No | Expressions that derive links of this relationship |
+| `requires` | list | No | Expressions that constrain this relationship's population |
+| `verbalization` | list | Yes | Patterns describing how to verbalize links |
+
+Each relationship is uniquely identified by a prepending its declared name with that of the containing
+concept. For instance, a relationship named `earns`, declared within the `Person` concept is identified
+by the string `Person.earns`. This convention naturally supports expressions that navigate over the links
+of relationships using the “dot-join” operator in a manner that is familiar to object-oriented programming
+languages.
+
+#### Multiplicities
+
+In a relationship that comprises more than one role, the last role might be functionally dermined
+by the other roles. This is declared by providing a ManyToOne multiplicity on that relationship.
+For relationships of ternary and higher arity, the multiplicity applies to the n-th role, meaning
+the object that plays the n-th role is functionally determined by the tuple of objects that play
+the first n-1 roles. A relationship like `Item.total_sales_in`, which records the total sales amount
+of an item at a given store, will have a ManyToOne multiplicity to indicate that for any pair
+of `Item` and `Store` at most one `Amount` will be recorded as the total sales amount for that
+`Item` and that `Store`.
+
+In the special case of a binary relationship, one might declare a OneToOne multiplicity, which
+indicates the relationship is ManyToOne in both directions. For instance, the `Person.ssn`
+relationship will have a OneToOne multiplicity because each person is assigned at most one social
+security number and each social security number is assigned to at most one person.
+
+In the absence of any multiplicity, we make no assumptions of functional dependencies among
+any of the roles.
+
+#### Roles
+
+Objects play roles in the links of a relationship. If you think of a relationship as a narrow table,
+then links are its rows and roles are its columns. Each role is played by some concept, which
+indicates the type of objects that can play that role in the relationship's links. In the
+`Person.earns` relationship, `Person` and `Salary` play the first and second roles respectively.
+
+By convention, the first role of any relationship will be played by the concept under which the
+relationship is declared. Any additional roles are declared in the roles field as follows:
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `player` | string | Yes | Name of the concept that plays this role |
+| `name` | string | No | Optional role name |
+
+A unary relationship like `Person.files_married_joint` declares no additional roles, 
+while a ternary relationship like `Person.purchased_on` declares two additional roles
+played by `Vehicle` and `Date` respectively.
+
+The role player often suffices to distinguish the role within a given relationship.
+However, the same concept can play multiple roles, such as in the ternary relationship
+`Store.ships_to_in_days` that connects pairs of `Store` objects to the number of days
+required to ship inventory from one store to another. When this happens, the user must
+declare a distinguising name for any additional role whose player does not suffice to
+distinguish it from other roles in the same relationship.
+
+### Identifying relationships
+
+Many conceptual models distinguish one or more relationships that should be used when
+referecing entity-type objects in expressions and queries. For instance, the relationship
+`Person.ssn` can be used to reference a person by their social security number; while
+the pair of relationships `License.acct` and `License.seat_nr` can be used to reference
+a license by the account and seat number. These relationships are always binary, and
+their first roles are always played by the concept the relationship is used to reference.
+When a set of identifying relationships is known for a concept, this knowledge can be
+expressed using the identify_by list.
+
+### Derivation expressions
+
+Concepts and relationships may be derived using expressions. A derived relationship is one
+whose links are derived from those of other relationships. For instance:
+
+```yaml
+- name: Person
+  relationships:
+    parent_of:
+      roles:
+        - player: Person
+          name: "child"
+      verbalizes: [ "{Person} is a parent of {Person:child}", "{Person:child} is a child of {Person}" ]
+    ancestor_of:
+      roles:
+        - player: Person
+          name: "descendant"
+      derived_by:
+        - "Person.parent_of(descendant)"
+          "Person.ancestor_of.parent_of(descendant)"  
+    taxed_at:
+      roles:
+        - player: TaxRate
+      derived_by:
+        - "10.0 WHERE ( Person.files_single AND Person.earns <= 11925 )"
+        - "10.0 WHERE ( Person.files_married_joint AND Person.earns <= 23850 )"
+        - ...
+```
+
+derives a link of `Person.taxed_at` for each object of the first role player (Person)
+using expressions that return a TaxRate based on the person's filing status and how
+much they earn. If, for some person, none of the expressions can be evaluated, then 
+the relationship will have no link involving that person.
+
+Expressions here are interpreted as rules for assembling the links of the relationship
+in the same way that a SQL query is interpreted as a rule for assembling the rows of
+a new table. Each expression must therefore reference each role of the relationship,
+either explicitly or implicitly. When an expression is relational, then it must explicitly
+reference each role. On the other handm if an expression returns a value (like 10.0 in the
+two examples here) then that value will implicitly play the last role, and the expression
+must reference each of the other roles explicitly. 
+
+A derived concept is one whose population is derived from those of its supertype concepts
+using one or more expressions. For instance:
+
+```yaml
+- name: Employee
+  extends: [Person]
+  derived_by: [ "EXISTS ( Person.earns )" ]
+```
+
+declares that the population of Employee is derived from the population of Person by
+classifying each Person who earns some salary as a Employee.
+
+### Requires
+
+The requires list contains expressions that give additional semantics to a concept or relationship
+by declaring conditions that must hold over their populations. When applied to a concept, each
+expression must reference the concept itself or one of its supertypes, as in:
+
+```yaml
+- name: SocialSecurityNr
+  extends: [Integer]
+  requires: [ "0 < SocialSecurityNr", "SocialSecurityNr <= 999999999" ]
+```
+
+When applied to a relationship, each expression must reference one or more roles of the
+relationship. For instance, in:
+
+```yaml
+- name: Item
+  extends: [Integer]
+  relationships:
+    offers_in:
+      roles:
+        - player: Store
+      verbalizations: [ "{Item} is offered for sale in {Store}", "{Store} offers sale of {Item}" ]  
+    total_sales_in:
+      roles:
+        - player: Store
+        - player: Amount
+      verbalizations: [ "{Item} sold for cumulative {Amount} in {Store}" ] 
+      requires:
+        - "Amount > 0.0"
+        - "Item.offers_in(Store)"
+```
+
+the first expression requires any value that plays the `Amount` role to be positive while the second
+requires any item that has sales in some store to be offered in that store.
+
+---
+
 ## Complete Example
 
 Here's a complete semantic model example showing all components working together:
@@ -478,7 +689,7 @@ semantic_model:
                   expression: email
             description: Customer email
 
-    relationships:
+    join_paths:
       - name: orders_to_customers
         from: orders
         to: customers
@@ -550,6 +761,12 @@ ai_context:
 ---
 
 ## Version History
+
+- **0.1.2** (2026-05-08): Support for both logical and conceptual modeling layers
+  - Core conceptual model structure
+  - Support for concepts, relationships, and logical -> conceptual schema mappings
+  - Renamed relationships in the logical (semantic) layer to join paths to avoid
+    conflict with relationships in the conceptual layer
 
 - **0.1.1** (2025-12-11): Initial release
   - Core semantic model structure
