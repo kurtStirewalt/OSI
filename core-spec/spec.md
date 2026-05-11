@@ -16,9 +16,8 @@
 4. [Join paths](#join-paths)
 5. [Fields](#fields)
 6. [Metrics](#metrics)
-7. [Concepts](#concepts)
-8. [Mappings](#mappings)
-9. [Complete Example](#complete-example)
+7. [Ontology](#ontology)
+8. [Complete Example](#complete-example)
 
 ---
 
@@ -41,7 +40,7 @@ Supported SQL and expression language dialects for metrics and field definitions
 
 ### Multiplicities
 
-The allowable multiplicities of relationships defined in the [Concepts](#concepts) section.
+The allowable multiplicities of relationships defined in the [Ontology](#ontology) section.
 
 | Multiplicity | Description |
 |---------|-------------|
@@ -97,7 +96,7 @@ semantic_model:
 
 ## Datasets
 
-Logical datasets represent business entities or concepts (fact and dimension tables). They contain fields and define the structure of the data.
+Logical datasets represent business entities (fact and dimension tables). They contain fields and define the structure of the data.
 
 ### Schema
 
@@ -423,39 +422,69 @@ custom_extensions:
 
 ---
 
-## Concepts
+## Ontology
 
-Concepts represent the types of things that have meaning in a business setting, e.g., person, company, or
-salary. Each concept is either an entity type or a value type. Every ontology starts with a value-type
-concept for each basic data type, like `Integer`, `Decimal`, and `String`, and an entity-type concept
-called `Any`. Every other concept in the ontology extends one of these starter concepts.
+Enterprise data are commonly modeled at different levels. The logical level comprises datasets and
+fields, while the conceptual level is an ontology that comprises concepts, relationships, and
+business rules. This section describes how to declare an ontology and, when a model also
+declares datasets and fields, logical to conceptual schema mappings.
+
+Ontologies and schema mappings are organized hierarchically. At the top level are the concepts,
+under which relationships, business rules, and schema mappings are then defined.
+
+### Concepts
+
+Concepts represent the types of things that have meaning in a business setting, e.g., person, company,
+or salary. Each concept is either an entity type or a value type. Each model implicitly includes a
+value-type for each basic data type, like `Integer`, `Decimal`, and `String`, and an entity type
+called `Any`. Every other concept in an ontology extends (is a subtype of) one of these concepts.
 
 ### Schema
 
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
-| `name` | string | Yes | Unique identifier for this concept |
+| `concept` | string | Yes | Unique name of a concept |
 | `description` | string | No | Human-readable description |
-| `relationships` | object | No | Relationships where this concept plays the first role |
+| `relationships` | list | No | Relationships where this concept plays the first role |
 | `extends` | list | No | Names of this concept's supertypes |
 | `derived_by` | list | No | Expressions for deriving this concept's population |
-| `identify_by` | list | No | Names of relationships that collectively identify this concept |
+| `identify_by` | list | No | Names of relationships to use to referencing objects in expressions and queries |
 | `requires` | list | No | Expressions that constrain this concept's population |
+| `entity_mappings` | list | No | Mappings from fields to concept objects |
+| `relationship_mappings` | list | No | Mappings from fields to relatioship links |
 
 ### Extends
 
 Every concept that a user declares extends one or more concepts in the ontology. The new concept
-is a sutype of each concept that it extends, and the extended concepts are its supertypes. For instance,`SocialSecurityNr` extends `Integer`, `Person` extends `Any`, and `Employee` extends `Person`. Any
-concept that directly or indirectly extends a value type like `Integer` or `String` is a value type.
-A concept is an entity type if it is not a value type. Any concept with an empty extends list defaults
-to being a subtype of `Any` and so is an entity type.
+is a sutype of each concept that it extends, and the extended concepts are its supertypes.
+
+Any concept that directly or indirectly extends a value type like `Integer` or `String` is a value type.
+Any concept that does not extend some value type is an entity type, and if a concept declares no extends
+list, then it is assumed to extend the built-in entity type `Any`.
+
+So if `SocialSecurityNr` extends `Integer` and `Employee` extends `Person`, which declares
+no extends list, then `SocialSecurityNr` is a value type and both `Person` and `Employee`
+are entity types.
 
 ### Relationships
 
-Relationships relate objects of one or more concepts and declare how to verbalize links among those objects.
-For instance, a relationship named `earns` links persons to salaries. Each link pairs some `Person` with
-some `Salary` and verbalizes as, “Person earns Salary annually.” Relationships have set (as opposed to bag)
-semantics, and links do not contain nulls.
+Relationships relate objects of one or more concepts and declare how to verbalize links among
+those objects. For instance, the following relationships:
+
+```yaml
+ontology:
+  - concept: Person
+    relationships:
+      - name: earns
+        roles:
+          - player: Salary
+        multiplicity: ManyToOne
+        verbalizes: [ "{Person} earns {Salary}" ]
+      ...
+```
+
+links `Person` and `Salary` objects and verbalizes each link as “Person earns Salary.”
+Relationships have set (as opposed to bag) semantics, and links do not contain nulls.
 
 #### Schema
 
@@ -470,116 +499,124 @@ semantics, and links do not contain nulls.
 | `verbalization` | list | Yes | Patterns describing how to verbalize links |
 
 Each relationship is uniquely identified by a prepending its declared name with that of the containing
-concept. For instance, a relationship named `earns`, declared within the `Person` concept is identified
-by the string `Person.earns`. This convention naturally supports expressions that navigate over the links
-of relationships using the “dot-join” operator in a manner that is familiar to object-oriented programming
-languages.
-
-#### Multiplicities
-
-In a relationship that comprises more than one role, the last role might be functionally dermined
-by the other roles. This is declared by providing a ManyToOne multiplicity on that relationship.
-For relationships of ternary and higher arity, the multiplicity applies to the n-th role, meaning
-the object that plays the n-th role is functionally determined by the tuple of objects that play
-the first n-1 roles. A relationship like `Item.total_sales_in`, which records the total sales amount
-of an item at a given store, will have a ManyToOne multiplicity to indicate that for any pair
-of `Item` and `Store` at most one `Amount` will be recorded as the total sales amount for that
-`Item` and that `Store`.
-
-In the special case of a binary relationship, one might declare a OneToOne multiplicity, which
-indicates the relationship is ManyToOne in both directions. For instance, the `Person.ssn`
-relationship will have a OneToOne multiplicity because each person is assigned at most one social
-security number and each social security number is assigned to at most one person.
-
-In the absence of any multiplicity, we make no assumptions of functional dependencies among
-any of the roles.
+concept. The relationship in the previous example is identified by the string `Person.earns`.
+This convention naturally supports expressions that navigate over the links of relationships using
+the “dot-join” operator in a manner that is familiar to object-oriented programming languages.
 
 #### Roles
 
 Objects play roles in the links of a relationship. If you think of a relationship as a narrow table,
-then links are its rows and roles are its columns. Each role is played by some concept, which
-indicates the type of objects that can play that role in the relationship's links. In the
+then its links are like rows and its roles are like columns. Each role is played by a concept that
+constraints the type of objects that can play the role in the relationship's links. In the
 `Person.earns` relationship, `Person` and `Salary` play the first and second roles respectively.
 
 By convention, the first role of any relationship will be played by the concept under which the
-relationship is declared. Any additional roles are declared in the roles field as follows:
+relationship is declared. Any additional roles are enumerated in the roles list using this schema:
 
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
 | `player` | string | Yes | Name of the concept that plays this role |
 | `name` | string | No | Optional role name |
 
-A unary relationship like `Person.files_married_joint` declares no additional roles, 
-while a ternary relationship like `Person.purchased_on` declares two additional roles
-played by `Vehicle` and `Date` respectively.
+A ternary relationship like `Person.purchased_on` declares two additional roles played by
+`Vehicle` and `Date` respectively, while a unary relationship like
+`Person.files_married_joint` will have an empty roles list.
 
-The role player often suffices to distinguish the role within a given relationship.
+The role player often suffices to distinguish the role within its relationship.
 However, the same concept can play multiple roles, such as in the ternary relationship
 `Store.ships_to_in_days` that connects pairs of `Store` objects to the number of days
 required to ship inventory from one store to another. When this happens, the user must
 declare a distinguising name for any additional role whose player does not suffice to
 distinguish it from other roles in the same relationship.
 
+#### Multiplicities
+
+In a relationship that comprises more than one role, objects that play the last role could
+be functionally dermined by a tuple of objects that play the other roles. This knowledge is
+declared using a `ManyToOne` multiplicity constraint. In the previous example, the constraint
+declares that each person earns at most one salary.
+
+For relationships of ternary and higher arity, the multiplicity applies to the n-th role, meaning
+the object that plays the n-th role is functionally determined by the tuple of objects that play
+the first n-1 roles. A relationship like `Item.total_sales_in`, which records the total sales amount
+of an item at a given store, is many-to-one because for any pair of `Item` and `Store` at most one
+`Amount` represents the total sales for that `Item` and that `Store`.
+
+In the special case of a binary relationship, one might declare a `OneToOne` multiplicity, which
+indicates the relationship is many-to-one in both directions. For instance, the `Person.ssn`
+relationship is one-to-one because each person is assigned at most one social security number
+and each social security number is assigned to at most one person.
+
+In the absence of any multiplicity, we make no assumptions of functional dependencies among
+any of the roles.
+
 ### Identifying relationships
 
-Many conceptual models distinguish one or more relationships that should be used when
-referecing entity-type objects in expressions and queries. For instance, the relationship
-`Person.ssn` can be used to reference a person by their social security number; while
-the pair of relationships `License.acct` and `License.seat_nr` can be used to reference
-a license by the account and seat number. These relationships are always binary, and
-their first roles are always played by the concept the relationship is used to reference.
-When a set of identifying relationships is known for a concept, this knowledge can be
-expressed using the identify_by list.
+Many conceptual models distinguish one or more relationships to use when referecing entity-type
+objects in expressions and queries. The `Person.ssn` relationship can be used to reference a
+person by their social security number; while the pair of relationships `License.acct` and
+`License.seat_nr` can be used to reference a license by its associated account and seat number.
+These identifier relationships are always binary, and their first role is always played by the
+concept the relationship is used to reference.
 
 ### Derivation expressions
 
-Concepts and relationships may be derived using expressions. A derived relationship is one
-whose links are derived from those of other relationships. For instance:
+Concepts and relationships may be derived using expressions. Think of a derived relationship
+as a conceptual view whose links are derived from those of other relationships. For instance:
 
 ```yaml
-- name: Person
-  relationships:
-    parent_of:
-      roles:
-        - player: Person
-          name: "child"
-      verbalizes: [ "{Person} is a parent of {Person:child}", "{Person:child} is a child of {Person}" ]
-    ancestor_of:
-      roles:
-        - player: Person
-          name: "descendant"
-      derived_by:
-        - "Person.parent_of(descendant)"
-          "Person.ancestor_of.parent_of(descendant)"  
-    taxed_at:
-      roles:
-        - player: TaxRate
-      derived_by:
-        - "10.0 WHERE ( Person.files_single AND Person.earns <= 11925 )"
-        - "10.0 WHERE ( Person.files_married_joint AND Person.earns <= 23850 )"
-        - ...
+ontology:
+  - concept: Person
+    relationships:
+      - name: parent_of
+        roles:
+          - player: Person
+            name: "child"
+        verbalizes: [ "{Person} is a parent of {Person:child}", "{Person:child} is a child of {Person}" ]
+      - name: ancestor_of
+        roles:
+          - player: Person
+            name: "descendant"
+        derived_by:
+          - "Person.parent_of(descendant)"
+            "Person.ancestor_of.parent_of(descendant)"  
+      taxed_at:
+        roles:
+          - player: TaxRate
+        derived_by:
+          - "10.0 WHERE ( Person.files_single AND Person.earns <= 11925 )"
+          - "10.0 WHERE ( Person.files_married_joint AND Person.earns <= 23850 )"
+          - ...
 ```
 
-derives a link of `Person.taxed_at` for each object of the first role player (Person)
-using expressions that return a TaxRate based on the person's filing status and how
-much they earn. If, for some person, none of the expressions can be evaluated, then 
-the relationship will have no link involving that person.
+declares two derived relationships -- `ancestor_of` and `taxed_at`. Each link of `Person.ancestor_of`
+relates a person to one of its descendants. The two expressions form the base and recursive cases for
+this calculation. In the base case, a `Person` as an ancestor of some `descendant` if that `Person`
+is the parent of that descendant. And in the recursive case, a `Person` is an ancestor of some
+`descendant` if that `Person` is an ancestor of the parent of that `descendant`. Notice in this
+example how role names are used to disambiguate the two `Person` roles in this relationship.
 
-Expressions here are interpreted as rules for assembling the links of the relationship
-in the same way that a SQL query is interpreted as a rule for assembling the rows of
-a new table. Each expression must therefore reference each role of the relationship,
-either explicitly or implicitly. When an expression is relational, then it must explicitly
-reference each role. On the other handm if an expression returns a value (like 10.0 in the
-two examples here) then that value will implicitly play the last role, and the expression
-must reference each of the other roles explicitly. 
+Each link of `Person.taxed_at` links a `Person` object to a `TaxRate` that is derived using
+expressions that determine the rate based on the person's filing status and how much they earn.
+If, for some person, none of the expressions can be evaluated, then the relationship will have
+no link involving that person.
+
+Expressions that derive a relationship are interpreted as rules for constructing the links of the
+relationship in the same way that a SQL query is interpreted as a rule for constructing the rows
+of a new table. Each expression must therefore reference each role of the relationship, either
+explicitly or implicitly. If an expression evaluates to some object (like 10.0 in the two examples
+here) then that object will implicitly play the last role, and the expression must reference each
+of the other roles explicitly. If an expression does not evaluate to any object, then it must
+explicitly reference each role.
 
 A derived concept is one whose population is derived from those of its supertype concepts
 using one or more expressions. For instance:
 
 ```yaml
-- name: Employee
-  extends: [Person]
-  derived_by: [ "EXISTS ( Person.earns )" ]
+ontology:
+  - concept: Employee
+    extends: [Person]
+    derived_by: [ "EXISTS ( Person.earns )" ]
 ```
 
 declares that the population of Employee is derived from the population of Person by
@@ -589,37 +626,186 @@ classifying each Person who earns some salary as a Employee.
 
 The requires list contains expressions that give additional semantics to a concept or relationship
 by declaring conditions that must hold over their populations. When applied to a concept, each
-expression must reference the concept itself or one of its supertypes, as in:
+expression must reference the concept, as in:
 
 ```yaml
-- name: SocialSecurityNr
-  extends: [Integer]
-  requires: [ "0 < SocialSecurityNr", "SocialSecurityNr <= 999999999" ]
+ontology:
+  - concept: SocialSecurityNr
+    extends: [Integer]
+    requires: [ "0 < SocialSecurityNr", "SocialSecurityNr <= 999999999" ]
 ```
 
 When applied to a relationship, each expression must reference one or more roles of the
 relationship. For instance, in:
 
 ```yaml
-- name: Item
-  extends: [Integer]
-  relationships:
-    offers_in:
-      roles:
-        - player: Store
-      verbalizations: [ "{Item} is offered for sale in {Store}", "{Store} offers sale of {Item}" ]  
-    total_sales_in:
-      roles:
-        - player: Store
-        - player: Amount
-      verbalizations: [ "{Item} sold for cumulative {Amount} in {Store}" ] 
-      requires:
-        - "Amount > 0.0"
-        - "Item.offers_in(Store)"
+ontology:
+  - concept: Item
+    extends: [Integer]
+    relationships:
+      - name: offers_in
+        roles:
+          - player: Store
+        verbalizations: [ "{Item} is offered for sale in {Store}", "{Store} offers sale of {Item}" ]  
+      - name: total_sales_in
+        roles:
+          - player: Store
+          - player: Amount
+        verbalizations: [ "{Item} sold for cumulative {Amount} in {Store}" ] 
+        requires:
+          - "Amount > 0.0"
+          - "Item.offers_in(Store)"
 ```
 
 the first expression requires any value that plays the `Amount` role to be positive while the second
 requires any item that has sales in some store to be offered in that store.
+
+### Mappings
+
+Logical to conceptual schema mappings declare how field values map to conceptual objects and
+relationship links among conceptual objects. The key idea is to map a SQL expression that
+references one or more fields to some role that is played by a value-typed concept.
+
+#### Entity mappings
+
+Entity mappings declare how and under what conditions fields in the logical level map to objects of
+some entity type in the population of the model by mapping to the value-typed roles of its identifying
+relationsips:
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `description` | string | No | Human-readable description |
+| `identify_by` | list | Yes | Role bindings for each identifying relationship |
+
+For instance, this entity mapping:
+
+```yaml
+ontology:
+  - concept: Person
+    relationships:
+      - name: nr
+        roles:
+          - player: SocialSecurityNr
+        multiplicity: OneToOne
+        verbalizes: [ "{Person} is identified by {SocialSecurityNr}" ]
+    identify_by: [ nr ]
+    entity_mappings:
+      - identify_by:
+        - role: Person.nr
+          expr: PERSONS.SSN
+    ...
+```
+
+uses one role binding that maps values from the `SSN` field of dataset `PERSONS` to objects
+that play the `SocialSecurityNr` role in the `nr` relationship. Because each link in that
+relationship associates a `SocialSecurityNr` object to some unique `Person` object, this
+one role binding suffices to associate each distinct `SSN` value in the dataset to a distinct
+`Person` object in the ontology.
+
+A more interesting example maps fields to instances of the `OrderLineItem` concept, whose identifier
+involves two relationships:
+
+```yaml
+  - concept: OrderLineItem
+    relationships:
+      - name: nr
+        roles: [ concept: LineNr ]
+        multiplicity: ManyToOne
+      - name: order
+        roles: [ concept: CustOrder ]
+        multiplicity: ManyToOne
+    identify_by:
+    requires: [ "nr", "order" ]
+    entity_mappings:
+      - identify_by:
+        - role: OrderLineItem.nr
+          expr: LINEITEMS.L_LINENUMBER
+        - role: OrderLineItem.order
+          identify_by:
+            - role: CustOrder.nr
+              expr: LINEITEMS.L_ORDERKEY
+
+```
+
+Notice how this entity mapping uses two role bindings -- one that maps the `L_LINENUMBER`
+field to the `LineNr` role of the `nr` relationship, and one that uses a more complex
+structure to map an object to the `CustOrder` role of the `order` relationship. Because
+`LineNr` is a value-typed concept, we can directly map an expression involving fields to
+that role just as in the previous example. But because `CustOrder` is an entity typed
+concept, we cannot directly map field values to its objects but must instead use its
+identifier, which here involves one relationship called `CustOrder.nr`.
+
+#### Relationship mappings
+
+Relationship mappings declare how and under what conditions fields refer to objects that
+play roles in the links of relationships. Unlike entity mappings, which declare how to
+construct objects from fields, relationship mappings declare how to look up objects using
+fields and then form tuples that populate relationships in the model.
+
+Relationship mappings are organized hierarchically into trees with common tuple prefixes
+to allow mapping to links of relationships of many different arities while minimizing
+redundancy. Each node in the tree has this schema: 
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `concept` | string | No | Concept that plays the role mapped to by this node in the tree |
+| `expr` | string | No | Maps fields to objects when the concept is a value type |
+| `identify_by` | list | Yes | Maps fields to identifying relationships when the concept is an entity type |
+| `relationship` | string | No | Relationship to populate using tuple mapped to by this level in the tree |
+| `children` | list | List of relationship child mappings |
+
+```yaml
+ontology:
+  - concept: Item
+    relationships:
+      - name: nr
+        roles: [ concept: SkuNr ]
+        multiplicity: OneToOne
+        verbalises: "{Item} is identified by {SkuNr}"
+      - name: active     # A unary relationship
+        verbalizes: "{Item} is actively sold"
+      - name: active_in
+        roles: [ concept: Store ]
+        verbalises: "{Item} is actively sold in {Store}"
+      - name: returned_in
+        roles: [ concept: Store, concept: Amount ]
+        verbalizes: "{Item} returned in {Store} for {Amount}"
+        multiplicitly: ManyToOne
+      - name: sold_in
+        roles: [ concept: Store, concept: Amount ]
+        verbalizes: "{Item} sells in {Store} for {Amount}"
+        multiplicitly: ManyToOne
+    identify_by: [ nr ]
+    entity_mappings:
+      - identify_by:
+          role: Item.nr
+          expr: ITEMS.SKU
+    relationship_mappings:
+      - identify_by:
+          role: Item.nr
+          expr: METRICS.SKU
+        relationship: Item.active
+        children:
+          - concept: Store
+            identify_by:
+              role: Store.nr
+              expr: METRICS.STORE
+            relationship: Item.active_in
+            children:
+              - concept: Amount
+                expr: METRICS.SALES
+                relationship: Item.sold_in
+              - concept: Amount
+                expr: METRICS.RETURNS
+                relationship: Item.returned_in
+```
+
+This relationship mapping maps fields of the `METRICS` dataset to links of four different relationships.
+The mapping has a tree structure in which paths from the root declare how to use fields to look up
+objects that form tuples of various lengths and that at each level in the tree, the tuple of objects
+formed at that level can be used to form links of the relationship that is named at that level. This
+hierarchical structure simplifies the mapping by not declaring how to map the `SKU` field four times
+and the `STORE` field three times.
 
 ---
 
