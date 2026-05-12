@@ -20,6 +20,9 @@ dialects:
   - "MAQL"                  # GoodData MAQL (Multi-Dimensional Analytical Query Language)
 
 
+multiplicities:
+  - "ManyToOne"
+  - "OneToOne"
 
 # Supported vendors for custom extensions
 vendors:
@@ -48,7 +51,10 @@ semantic_model:
 
     # Optional: Defines how logical datasets are connected
     # See Relationships section below for detailed structure
-    relationships: []
+    join_paths: []
+
+    # Optional: Defines the ontology used to give meaning to the data
+    ontology: []
 
     # Optional: 
     # These metrics can span one or more logical datasets and use relationships
@@ -118,7 +124,7 @@ datasets:
 # Relationship Schema
 # Defines how logical datasets or semantic models are connected
 # Represents foreign key relationships (many-to-one or one-to-one)
-relationships:
+join_paths:
   # Required: Unique identifier for the relationship
   - name: string
 
@@ -217,3 +223,103 @@ metrics:
     custom_extensions:
       - vendor_name: string  # Must be one of the values from 'vendors' enum above
         data: string
+
+---
+# Ontology Schema
+ontology:
+
+  # Required: Unique identifier for the concept
+  - concept: string
+
+    # Optional: Human-readable description of the concept
+    description: string
+
+    # Optional: Relationships in which this concept plays the first role
+    relationships: []
+
+    # Optional: Array of names of relationships that form the preferred identifier of this concept
+    identify_by: []
+
+    # Optional: Array of names of supertype concepts that this concept extends
+    extends: []
+
+    # Optional: Array of expressions that derive the population of this concept
+    derived_by: []
+
+    # Optional: Array of expressions that constrain the population of this concept
+    requires: []
+
+    # Optional: Array of entity mappings that map logical fields to concept objects
+    entity_mappings: []
+
+    # Optional: Array of relationship mappings that map logical fields to relationship links
+    relationship_mappings: []
+
+relationships:
+
+  # Required: unique name of the relationship in the context of the declaring concept
+  - name: string
+
+    # Optional: Human-readable description
+    description: string
+
+    # Optional: Multiplicity constraint
+    multiplicity: multiplicities
+
+    # Optional: List of additional roles in this relationship
+    roles: []
+
+    # Optional: Array of expressions that derive links of this relationship
+    derived_by: []
+
+    # Optional: Array of expressions that constrain this relationship's population
+    requires: []
+
+    # Optional Array of string patterns that describe how to verbalize links of
+    # this relationship
+    verbalizes: []
+
+roles:
+
+  # Required: Name of the concept that plays this role
+  - player: string
+
+    # Optional: Role name
+    name: string
+
+entity_mappings:
+
+  - entity_map: []
+
+entity_map:
+
+  # Required: String naming the idenfier relationship whose role is mapped to using either the
+  # expr if the role is played by a value type or the nested entity map if the role is played
+  # by an entity type
+  - role: string
+
+    # Optional: SQL expression whose value maps to the role
+    expr: string
+
+    # Optional: Nested entity map that returns an entity object that maps to the role
+    entity_map: []
+
+relationship_mappings:
+
+  - relationship_map: []
+
+relationship_map:
+
+  # Optional: Name of the concept that plays this role in the relationship map
+  - concept: string
+
+    # Optional: Maps fields to this role when the player is a value type
+    expr: string
+
+    # Optional: Maps fields to this role when the player is an entity type
+    entity_map: []
+
+    # Optional: Name of relationship whose links are mapped to by this level in the tree 
+    relationship: string
+
+    relationship_mappings: []
