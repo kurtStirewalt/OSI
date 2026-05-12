@@ -449,8 +449,8 @@ Concepts conform to the following schema:
 | `derived_by` | list | No | Expressions that derive this concept's population |
 | `identify_by` | list | No | Names of relationships that uniquely reference objects of this concept |
 | `requires` | list | No | Expressions that constrain this concept's population |
-| `entity_mappings` | list | No | Mappings from field values to concept objects |
-| `relationship_mappings` | list | No | Mappings from field values to relatioship links |
+| `entities` | list | No | Mappings that determine this concept's objects (when an entity type) |
+| `links` | list | No | Mappings from field values to relatioship links |
 
 ### Extends
 
@@ -552,7 +552,7 @@ ontology:
             name: destination
           - player: NrDays
         multiplicity: ManyToOne
-        verbalizes: [ "{Store} ships to {destination} in {NrDays}" ]
+        verbalizes: [ "{Store} ships to {Store:destination} in {NrDays}" ]
 ```
 
 the role name `destination` distinguishes the second `Store`-playing role from the first in
@@ -695,20 +695,47 @@ requires any item that has sales in some store to be offered in that store.
 
 ### Mappings
 
-Logical to conceptual schema mappings declare how field values map to conceptual objects and
-relationship links among conceptual objects. The key idea is to map a SQL expression that computes
-a value from one or more fields to some role that is played by a value-typed concept.
-
-#### Entity mappings
-
-Entity mappings declare how and under what conditions fields in the logical level map to objects of
-some entity type in the population of the model. Each mapping conforms to the following schema:
+Logical to conceptual schema mappings declare how to map field values to conceptual objects
+and links. The most basic kind of mapping is a value map, which has the following schema:
 
 | Field | Type | Required | Description |
-|-------|------|----------|-------------|
-| `entity_map` | list | Yes | Role bindings for each identifying relationship |
+|--------------|----------|-----|-------|
+| `role`  | string   | Yes | Expression that indicates the role that the mapped objects will play |
+| `value` | string   | Yes | Expression that calculates the value to map to the role |
 
-For instance, the entity mapping in:
+These declare how to map a SQL expression that computes a value from one or more fields to a
+role of some relationship, where the role must be played by a value type.
+
+Entity-type objects (entities) are opaque and must be referenced by their identifying
+relationships. These relationships are always binary, with one role played by the entity
+type and the other played by some other concept. In the common case where an entity type
+is identified by a single relationship whose other role is played by a value type, a value
+map suffices to declare the existence of entities of that type and also to look them up
+when mapping to links of a relationship. And if an entity type is identified by a pair
+of such relationships, a pair of value maps suffice for the same purpose.
+
+An entity map is an array of structures, each of which is either a value map or a nested entity
+map that looks up an object to map to some role of an identifier relationship. These structures
+have the following schema:
+
+| Field | Type | Required | Description |
+|--------------|----------|-----|-------|
+| `role`   | string   | Yes | Expression that indicates the role the mapped objects will play |
+| `value`  | string   | if no `entity`  | Expression that maps to a value (when role played by a value type) |
+| `entity` | list     | if no `value`  | Entity map that maps to an entity (when role played by an entity type) |
+
+where each must provide either a `value` expression (in which case the structure reduces to a value map)
+or a nested `entity` map but not both.
+
+Building on these structures, we can declare precisely how fields determine the entities of a concept
+and the links of every relationship in which the concept plays the first role. 
+
+#### Entities (entity maps that determine the existence of objects of some entity type)
+
+When a concept is an entity type, it can declare an `entities` array, each element of which
+is an entity map.
+
+For instance, in:
 
 ```yaml
 ontology:
@@ -720,17 +747,18 @@ ontology:
         multiplicity: OneToOne
         verbalizes: [ "{Person} is identified by {SocialSecurityNr}" ]
     identify_by: [ nr ]
-    entity_mappings:
-      - entity_map:
+
+    entities:
+      - entity:
         - role: Person.nr
-          expr: PERSONS.SSN
+          value: PERSONS.SSN
     ...
 ```
 
-uses one role binding that maps values from the `SSN` field of dataset `PERSONS` to objects
-that play the `SocialSecurityNr` role in the `nr` relationship. Because each link in that
+uses a single value map to declare how values from the `SSN` field of dataset `PERSONS`
+map to `SocialSecurityNr` objects in the `nr` relationship. Because each link in that
 relationship associates a `SocialSecurityNr` object to some unique `Person` object, this
-role binding suffices to associate each distinct `SSN` value in the dataset to a distinct
+value map suffices to associate each distinct `SSN` value in the dataset to a distinct
 `Person` object in the ontology.
 
 A more interesting example maps fields to the `OrderLineItem`  concept, whose identifier
@@ -740,51 +768,57 @@ involves two relationships:
   - concept: OrderLineItem
     relationships:
       - name: nr
-        roles: [ concept: LineNr ]
+        roles: [ player: LineNr ]
         multiplicity: ManyToOne
       - name: order
-        roles: [ concept: CustOrder ]
+        roles: [ player: CustOrder ]
         multiplicity: ManyToOne
     identify_by: [ "nr", "order" ]
     requires: [ "OrderLineItem.nr", "OrderLineItem.order" ]
-    entity_mappings:
-      - entity_map:
+
+    entities:
+      - entity:
         - role: OrderLineItem.nr
-          expr: LINEITEMS.L_LINENUMBER
+          value: LINEITEMS.L_LINENUMBER
         - role: OrderLineItem.order
-          entity_map:
+          entity:
             - role: CustOrder.nr
-              expr: LINEITEMS.L_ORDERKEY
+              value: LINEITEMS.L_ORDERKEY
 
 ```
 
-This entity mapping uses two role bindings -- one that maps the `L_LINENUMBER` field to the `LineNr`
-role of the `nr` relationship, and one that uses a more complex structure to map `CustOrder` objects
-to the role that concept plays in the `order` relationship. Because `LineNr` is a value-typed concept,
-we can directly map an expression involving fields to that role just as in the previous example. But
-because `CustOrder` is an entity type, we cannot directly map field values to its objects but must
-instead use its identifier, which here involves one relationship called `CustOrder.nr`.
+This mapping contains a single entity map with two components -- a value map that maps the
+`L_LINENUMBER` field to the `LineNr` role of the `nr` relationship, and a nested entity map
+that maps `CustOrder` objects to the role that concept plays in the `order` relationship.
 
-#### Relationship mappings
+#### Links (mappings that determine the existence of relationship links)
 
-Relationship mappings declare how and under what conditions fields refer to objects that
-play roles in the links of relationships. Unlike entity mappings, which declare how to
-construct objects from fields, relationship mappings declare how to look up objects using
-fields and then form tuples that populate relationships in the model.
+Each of an ontology's relationships is grouped under the concept that plays its first role.
+The concept's `links` array declares schema mappings from field values to links of these
+relationships. Each element in the array is a tree structure that concisely declares how
+to map to tuples that form the links of one or more of these relationships. The path from
+the root of a tree to each node describes how to map to tuples of objects that form the
+links of the relationship that is named by the node. These structures leverage the hierarchical
+nature of YAML to prevent the duplication in the typical case when the fields of a single
+dataset map to many relationships.
 
-Relationship mappings are organized hierarchically into trees with common tuple prefixes
-to allow mapping to links of relationships of many different arities while minimizing
-redundancy. Each node in the tree has this schema: 
+Each tree node has the following schema:
 
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
-| `concept` | string | No | Concept that plays the role mapped to by this node in the tree |
-| `expr` | string | No | Maps fields when the concept is a value type |
-| `entity_map` | list | Yes | Maps fields when the concept is an entity type |
+| `concept` | string | when level > 1 | Concept whose objects are looked up by this node |
+| `value` | string | if no `entity` | Expression that computes a value (when concept is a value type) |
+| `entity` | list | if no `value` | Entity map that looks up an object (when concept is an entity type) |
 | `relationship` | string | No | Relationship whose links are mapped to by this level in the tree |
-| `children` | list | No | List of relationship child mappings |
+| `children` | list | No | List of child nodes in the tree |
 
-For instance, the relationship mapping in:
+
+Each node must provide either a `value` or an `entity` by which to look up objects but never both.
+The level of each node coincides with the arity of the associated relationship. So a top-level 
+(root) node could map to a unary relationship, a node at level 2 could map to a binary
+relationship, and so forth.
+
+For instance, the relationship mapping declared here:
 
 ```yaml
 ontology:
@@ -799,42 +833,47 @@ ontology:
       - name: active_in
         roles: [ concept: Store ]
         verbalises: [ "{Item} is actively sold in {Store}" ]
-      - name: returned_in
+      - name: returned_in_for
         roles: [ concept: Store, concept: Amount ]
         verbalizes: [ "{Item} returned in {Store} for {Amount}" ]
         multiplicitly: ManyToOne
-      - name: sold_in
+      - name: sold_in_for
         roles: [ concept: Store, concept: Amount ]
         verbalizes: [ "{Item} sells in {Store} for {Amount}" ]
         multiplicitly: ManyToOne
     identify_by: [ nr ]
-    entity_mappings:
-      - entity_map:
-          role: Item.nr
-          expr: ITEMS.SKU
-    relationship_mappings:
-      - entity_map:
-          role: Item.nr
-          expr: METRICS.SKU
+
+    entities:
+      - entity:
+          - role: Item.nr
+            value_map: ITEMS.SKU
+
+    links:
+      - entity:
+          - role: Item.nr
+            value_map: METRICS.SKU
         relationship: Item.active
-        relationship_mappings:
+        children:
           - concept: Store
-            entity_map:
-              role: Store.nr
-              expr: METRICS.STORE
+            entity:
+              - role: Store.nr
+                value: METRICS.STORE
             relationship: Item.active_in
-            relationship_mappings:
+            children:
               - concept: Amount
-                expr: METRICS.SALES
-                relationship: Item.sold_in
+                value: METRICS.SALES
+                relationship: Item.sold_in_for
               - concept: Amount
-                expr: METRICS.RETURNS
-                relationship: Item.returned_in
+                value: METRICS.RETURNS
+                relationship: Item.returned_in_for
 ```
 
-maps fields of the `METRICS` dataset to links of four different relationships. The hierarchical
-structure simplifies the mapping by not declaring how to map the `SKU` field four times and the
-`STORE` field three times.
+describes a tree with one root node, one node at level 2, and 2 nodes at level 3. Each node
+maps fields of the `METRICS` dataset to links of four different relationships, and notice
+how the mapping to `Item` objects is declared once even though `Item` plays a role in all
+four of the relationships and that the mapping to `Store` objects is declared once even
+though `Store` plays a role in three of the relationships.
+
 
 ---
 
