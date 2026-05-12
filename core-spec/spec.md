@@ -791,13 +791,12 @@ maps `CustOrder` objects to the second role in the `order` relationship.
 #### Links (mappings that determine the existence of relationship links)
 
 Each relationships is grouped under the concept that plays its first role. A concept's
-`links` array declares schema mappings from field values to links of these relationships.
-Each array element is a tree that concisely declares how to map fields to the links of
-one or more of these relationships. More precisely, the path from the root of a tree
-to a node describes how to map to tuples of objects that form the links of the relationship
-that is named by the node. These structures leverage the hierarchical nature of YAML to
-avoid duplication in the typical case when the fields of a single dataset map to many
-relationships.
+`links` array maps field schema to relationships. Each array element is a tree that
+concisely declares how field values map to the links of one or more of these relationships.
+More precisely, the path from the root of a tree to a node describes how to map to tuples
+of objects that form the links of the relationship that is named by the node. These structures
+leverage the hierarchical nature of YAML to avoid duplication in the typical case when the
+fields of a single dataset map to many relationships.
 
 Each tree node has the following schema:
 
@@ -842,12 +841,12 @@ ontology:
     entities:
       - entity:
           - role: Item.nr
-            value_map: ITEMS.SKU
+            value: ITEMS.SKU
 
     links:
       - entity:
           - role: Item.nr
-            value_map: METRICS.SKU
+            value: METRICS.SKU
         relationship: Item.active
         children:
           - concept: Store
