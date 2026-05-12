@@ -1,6 +1,6 @@
 # OSI - Core Metadata Specification
 
-**Version:** 0.1.1
+**Version:** 0.1.2
 
 ## Goals
 
@@ -696,27 +696,24 @@ requires any item that has sales in some store to be offered in that store.
 ### Mappings
 
 Logical to conceptual schema mappings declare how to map field values to conceptual objects
-and links. The most basic kind of mapping is a value map, which has the following schema:
+and links. The most basic kind of mapping is a value map:
 
 | Field | Type | Required | Description |
 |--------------|----------|-----|-------|
 | `role`  | string   | Yes | Expression that indicates the role that the mapped objects will play |
 | `value` | string   | Yes | Expression that calculates the value to map to the role |
 
-These declare how to map a SQL expression that computes a value from one or more fields to a
+which declares how to map a SQL expression that computes a value from one or more fields to a
 role of some relationship, where the role must be played by a value type.
 
-Entity-type objects (entities) are opaque and must be referenced by their identifying
-relationships. These relationships are always binary, with one role played by the entity
-type and the other played by some other concept. In the common case where an entity type
-is identified by a single relationship whose other role is played by a value type, a value
-map suffices to declare the existence of entities of that type and also to look them up
-when mapping to links of a relationship. And if an entity type is identified by a pair
-of such relationships, a pair of value maps suffice for the same purpose.
+Entity-type objects (entities) are opaque and must be mapped to via their identifying
+relationships. These relationships are always binary, with the first role played by
+the entity type itself. In the common case where an entity type is identified by a
+single relationship whose second role is played by a value type, a value map suffices
+to declare the existence of entities of that type or to look them up when mapping to
+links of a relationship.
 
-An entity map is an array of structures, each of which is either a value map or a nested entity
-map that looks up an object to map to some role of an identifier relationship. These structures
-have the following schema:
+An entity map is an array of identifier maps:
 
 | Field | Type | Required | Description |
 |--------------|----------|-----|-------|
@@ -724,11 +721,11 @@ have the following schema:
 | `value`  | string   | if no `entity`  | Expression that maps to a value (when role played by a value type) |
 | `entity` | list     | if no `value`  | Entity map that maps to an entity (when role played by an entity type) |
 
-where each must provide either a `value` expression (in which case the structure reduces to a value map)
-or a nested `entity` map but not both.
+each of which is either a value map or a nested entity map that looks up an object to map to some
+role of an identifier relationship.
 
-Building on these structures, we can declare precisely how fields determine the entities of a concept
-and the links of every relationship in which the concept plays the first role. 
+Building on value and entity maps, we can declare precisely how fields determine the entities of
+a concept and the links of every relationship in which that concept plays the first role. 
 
 #### Entities (entity maps that determine the existence of objects of some entity type)
 
@@ -755,14 +752,14 @@ ontology:
     ...
 ```
 
-uses a single value map to declare how values from the `SSN` field of dataset `PERSONS`
-map to `SocialSecurityNr` objects in the `nr` relationship. Because each link in that
-relationship associates a `SocialSecurityNr` object to some unique `Person` object, this
-value map suffices to associate each distinct `SSN` value in the dataset to a distinct
-`Person` object in the ontology.
+uses a value map to declare how values from the `SSN` field of dataset `PERSONS` are used
+to form `SocialSecurityNr` values that map to the second role of the `nr` relationship.
+Because each link in that relationship associates a `SocialSecurityNr` value to some
+unique `Person` entity, this value map suffices to associate each distinct `SSN` value
+in the dataset to a distinct `Person` object in the ontology.
 
-A more interesting example maps fields to the `OrderLineItem`  concept, whose identifier
-involves two relationships:
+A more interesting example maps field values to `OrderLineItem` entities, which are
+identified using two relationships:
 
 ```yaml
   - concept: OrderLineItem
@@ -787,20 +784,20 @@ involves two relationships:
 
 ```
 
-This mapping contains a single entity map with two components -- a value map that maps the
-`L_LINENUMBER` field to the `LineNr` role of the `nr` relationship, and a nested entity map
-that maps `CustOrder` objects to the role that concept plays in the `order` relationship.
+This mapping contains a single entity map with two role mappings -- a value map that maps the
+`L_LINENUMBER` field to the second role of the `nr` relationship, and a nested entity map that
+maps `CustOrder` objects to the second role in the `order` relationship.
 
 #### Links (mappings that determine the existence of relationship links)
 
-Each of an ontology's relationships is grouped under the concept that plays its first role.
-The concept's `links` array declares schema mappings from field values to links of these
-relationships. Each element in the array is a tree structure that concisely declares how
-to map to tuples that form the links of one or more of these relationships. The path from
-the root of a tree to each node describes how to map to tuples of objects that form the
-links of the relationship that is named by the node. These structures leverage the hierarchical
-nature of YAML to prevent the duplication in the typical case when the fields of a single
-dataset map to many relationships.
+Each relationships is grouped under the concept that plays its first role. A concept's
+`links` array declares schema mappings from field values to links of these relationships.
+Each array element is a tree that concisely declares how to map fields to the links of
+one or more of these relationships. More precisely, the path from the root of a tree
+to a node describes how to map to tuples of objects that form the links of the relationship
+that is named by the node. These structures leverage the hierarchical nature of YAML to
+avoid duplication in the typical case when the fields of a single dataset map to many
+relationships.
 
 Each tree node has the following schema:
 
@@ -808,17 +805,16 @@ Each tree node has the following schema:
 |-------|------|----------|-------------|
 | `concept` | string | when level > 1 | Concept whose objects are looked up by this node |
 | `value` | string | if no `entity` | Expression that computes a value (when concept is a value type) |
-| `entity` | list | if no `value` | Entity map that looks up an object (when concept is an entity type) |
-| `relationship` | string | No | Relationship whose links are mapped to by this level in the tree |
+| `entity` | list | if no `value` | Entity map that looks up an entity (when concept is an entity type) |
+| `relationship` | string | No | Relationship whose links are mapped to by the path to this node |
 | `children` | list | No | List of child nodes in the tree |
 
-
 Each node must provide either a `value` or an `entity` by which to look up objects but never both.
-The level of each node coincides with the arity of the associated relationship. So a top-level 
-(root) node could map to a unary relationship, a node at level 2 could map to a binary
-relationship, and so forth.
+The level of each node coincides with the arity of the associated relationship. So a root node
+could map to a unary relationship, a node at level 2 could map to a binary relationship, and so
+forth.
 
-For instance, the relationship mapping declared here:
+For instance, the `links` array declared here:
 
 ```yaml
 ontology:
@@ -868,12 +864,11 @@ ontology:
                 relationship: Item.returned_in_for
 ```
 
-describes a tree with one root node, one node at level 2, and 2 nodes at level 3. Each node
-maps fields of the `METRICS` dataset to links of four different relationships, and notice
-how the mapping to `Item` objects is declared once even though `Item` plays a role in all
-four of the relationships and that the mapping to `Store` objects is declared once even
-though `Store` plays a role in three of the relationships.
-
+describes a tree with one root node, one node at level 2, and two nodes at level 3.
+Each node maps fields of the `METRICS` dataset to links of four different relationships,
+and notice how the mapping to `Item` objects is declared once even though `Item` plays a
+role in all four of the relationships and that the mapping to `Store` objects is declared
+once even though `Store` plays a role in three of the relationships.
 
 ---
 
@@ -1016,11 +1011,11 @@ ai_context:
 
 ## Version History
 
-- **0.1.2** (2026-05-08): Support for both logical and conceptual modeling layers
-  - Core conceptual model structure
+- **0.1.2** (2026-05-12): Support for both logical and conceptual modeling layers (ontologies)
+  - Core ontology structure
   - Support for concepts, relationships, and logical -> conceptual schema mappings
-  - Renamed relationships in the logical (semantic) layer to join paths to avoid
-    conflict with relationships in the conceptual layer
+  - Renamed relationships in the logical layer to join paths to avoid conflict with
+    relationships in the conceptual layer
 
 - **0.1.1** (2025-12-11): Initial release
   - Core semantic model structure

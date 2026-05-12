@@ -1,5 +1,5 @@
 # OSI - Core Metadata Spec (YAML Schema)
-version: 0.1.1
+version: 0.1.2
 # 
 # Goals:
 # - Standardization: Establish uniform language and structure for semantic model definitions
@@ -249,11 +249,11 @@ ontology:
     # Optional: Array of expressions that constrain the population of this concept
     requires: []
 
-    # Optional: Array of entity mappings that map logical fields to concept objects
-    entity_mappings: []
+    # Optional: Array of entity maps that map logical fields to entities (when concept is an entity type)
+    entities: []
 
-    # Optional: Array of relationship mappings that map logical fields to relationship links
-    relationship_mappings: []
+    # Optional: Array of link trees that map logical fields to relationships
+    links: []
 
 relationships:
 
@@ -287,11 +287,12 @@ roles:
     # Optional: Role name
     name: string
 
-entity_mappings:
+entities:
 
-  - entity_map: []
+  # Array of entity maps
+  - entity: []
 
-entity_map:
+entity:
 
   # Required: String naming the idenfier relationship whose role is mapped to using either the
   # expr if the role is played by a value type or the nested entity map if the role is played
@@ -299,27 +300,31 @@ entity_map:
   - role: string
 
     # Optional: SQL expression whose value maps to the role
-    expr: string
+    value: string
 
     # Optional: Nested entity map that returns an entity object that maps to the role
-    entity_map: []
+    entity: []
 
-relationship_mappings:
+links:
 
-  - relationship_map: []
+  - links_tree_node: []
 
-relationship_map:
+links_tree_node:
 
-  # Optional: Name of the concept that plays this role in the relationship map
+  # Name of the concept whose objects are looked up by this node.
+  # Optional when the node is the root of a tree.
   - concept: string
 
-    # Optional: Maps fields to this role when the player is a value type
-    expr: string
+    # Optional: Maps fields to a value (when concept is a value type)
+    # Must be present when entity is absent
+    value: string
 
-    # Optional: Maps fields to this role when the player is an entity type
-    entity_map: []
+    # Optional: Maps fields to an entity (when concept is an entity type)
+    # Must be present when value is absent
+    entity: []
 
     # Optional: Name of relationship whose links are mapped to by this level in the tree 
     relationship: string
 
-    relationship_mappings: []
+    # Optional: Array of links_tree_node children of this node
+    children: []
