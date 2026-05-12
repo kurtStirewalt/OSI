@@ -45,7 +45,7 @@ The allowable multiplicities of relationships defined in the [Ontology](#ontolog
 | Multiplicity | Description |
 |---------|-------------|
 | `ManyToOne` | The last role of a relationship is uniquely determined by the other roles |
-| `OneToOne` | The relationship is ManyToMany in both directions (only for binary relationships) |
+| `OneToOne` | The relationship is ManyToOne in both directions (only for binary relationships) |
 
 ### Vendors
 
@@ -428,7 +428,7 @@ Enterprise data are often modeled at both the logical level, in terms of dataset
 and the conceptual level in the form of an ontology that comprises concepts, relationships,
 and business rules. This section describes how to declare an ontology and schema mappings
 from logical-level fields to concepts and relationships in the ontology. Ontologies are
-organized hierarchically in top-level collection of tree structures, each root of which
+organized hierarchically in a top-level collection of tree structures, each root of which
 is a concept, under which relationships and schema mappings are defined.
 
 ### Concepts
@@ -450,7 +450,7 @@ Concepts conform to the following schema:
 | `identify_by` | list | No | Names of relationships that uniquely reference objects of this concept |
 | `requires` | list | No | Expressions that constrain this concept's population |
 | `entities` | list | No | Mappings that determine this concept's objects (when an entity type) |
-| `links` | list | No | Mappings from field values to relatioship links |
+| `links` | list | No | Mappings from field values to relationship links |
 
 ### Extends
 
